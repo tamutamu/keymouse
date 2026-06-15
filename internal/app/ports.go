@@ -20,6 +20,11 @@ type Input interface {
 	Click(action spatial.ClickAction) error
 	// ShiftHeld はいずれかの Shift キーが押されていれば true を返す。
 	ShiftHeld() bool
+	// AltHeld は Alt キーが押されていれば true を返す。Alt+h/j/k/; のグリッド移動判定に使う。
+	AltHeld() bool
+	// ReleaseShift は Shift キーの押下状態を解除する。Shift+ラベルで即クリック
+	// する際、押されたままの Shift がクリックに漏れる(Shift+クリックになる)のを防ぐ。
+	ReleaseShift()
 }
 
 // MonitorLocator はカーソル位置にあるモニターの解決を抽象化する。

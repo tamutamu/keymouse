@@ -40,6 +40,10 @@ func (winInput) Click(action spatial.ClickAction) error {
 
 func (winInput) ShiftHeld() bool { return win32.IsShiftPressed() }
 
+func (winInput) AltHeld() bool { return win32.IsAltPressed() }
+
+func (winInput) ReleaseShift() { win32.ReleaseShift() }
+
 // winMonitors は MonitorLocator ポートを Win32 で実装する。
 type winMonitors struct{}
 

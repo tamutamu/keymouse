@@ -71,6 +71,22 @@ func IsShiftPressed() bool {
 	return state&KEY_PRESSED != 0
 }
 
+// IsAltPressed は Alt キーが現在押されていれば true を返す。
+func IsAltPressed() bool {
+	state, _, _ := procGetKeyState.Call(VK_MENU)
+	return state&KEY_PRESSED != 0
+}
+
+// ReleaseShift は左右の Shift キーのキーアップを合成送信し、押下状態を解除する。
+// 「Shift+ラベルで即クリック」する際、物理的に押されたままの Shift がクリックに
+// 修飾として漏れ、対象アプリが Shift+クリックとして受け取ってしまうのを防ぐ。
+// 既に離されているキーへのキーアップは無害なので、無条件に呼んでよい。
+func ReleaseShift() {
+	procKeybdEvent.Call(VK_LSHIFT, 0, KEYEVENTF_KEYUP, 0)
+	procKeybdEvent.Call(VK_RSHIFT, 0, KEYEVENTF_KEYUP, 0)
+	procKeybdEvent.Call(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0)
+}
+
 // GetCursorPos は現在のカーソル位置をスクリーン座標で返す。
 func GetCursorPos() (x, y int, err error) {
 	var pt POINT

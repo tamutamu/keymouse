@@ -7,12 +7,20 @@ package main
 import (
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/tamutamu/keymouse/internal/app"
 	"github.com/tamutamu/keymouse/internal/settings"
 )
 
 func main() {
+	// Win32 のウィンドウ・ホットキー・メッセージループは、それらを生成した
+	// 同一の OS スレッド上で実行しなければならない。Go ランタイムは goroutine を
+	// 任意のタイミングで別スレッドへ移し得るため、メインスレッドを固定する。
+	// これを怠ると RegisterHotKey が "belongs to other thread" で失敗したり、
+	// メッセージループがウィンドウメッセージを受け取れなくなる。
+	runtime.LockOSThread()
+
 	// ログはファイル名・行番号付きで標準エラー出力へ。
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetOutput(os.Stderr)

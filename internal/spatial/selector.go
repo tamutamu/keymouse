@@ -13,13 +13,18 @@ type Config struct {
 	MaxDepth   int     // 段数の安全上限(暴走防止)
 }
 
-// DefaultConfig はデフォルト構成(最大5×5、最小ラベル20px、安全上限8段)を返す。
+// DefaultConfig はデフォルト構成(最大5×5、最小ラベル12px、最大3段)を返す。
+//
+// MinLabelPx は最終段のセルの最小辺長を実質的に決める。値を小さくするほど最終セルが
+// 小さくなり、カーソルが飛ぶ到達点が細かくなる(クリック可能な箇所が増える)が、その分
+// ラベルも小さくなる。ラベルはオーバーレイ側でセルに合わせて自動縮小・グリッド線で
+// 区切られるため、12px 程度まで下げても判読できる。
 func DefaultConfig() Config {
 	return Config{
 		Cols:       5,
 		Rows:       5,
-		MinLabelPx: 20,
-		MaxDepth:   8,
+		MinLabelPx: 12,
+		MaxDepth:   3,
 	}
 }
 
@@ -30,13 +35,15 @@ func DefaultConfig() Config {
 // グリッド列だけで一意に決まる(c×r で割れば必ず 1/c × 1/r)。したがって
 // セッション開始時にモニターサイズから予定表を一度だけ計算できる。
 //
-// 各段では、セル一辺が MinLabelPx を下回らない範囲で最大 Cols×Rows までのグリッドを
-// 選ぶ。両方向とも1セルしか取れなくなった時点で打ち切る(それ以上は読める大きさに
-// 分割できない)。最後の段でキーを押すとクリックが実行される。
+// 各段では、セル一辺が MinLabelPx を下回らない範囲で、その段の最大グリッドまでの
+// グリッドを選ぶ。最大グリッドは gridCapAtDepth により段が深いほど小さくなる
+// (浅い段は密に素早く絞り、深い段は粗く読みやすく)。両方向とも1セルしか取れなく
+// なった時点で打ち切る(それ以上は読める大きさに分割できない)。最後の段でキーを
+// 押すとクリックが実行される。
 func GridSchedule(monW, monH float64, cfg Config) [][2]int {
 	minPx := cfg.MinLabelPx
 	if minPx <= 0 {
-		minPx = 20
+		minPx = 12
 	}
 	maxCols := cfg.Cols
 	if maxCols <= 0 {
@@ -48,14 +55,17 @@ func GridSchedule(monW, monH float64, cfg Config) [][2]int {
 	}
 	maxDepth := cfg.MaxDepth
 	if maxDepth <= 0 {
-		maxDepth = 8
+		maxDepth = 3
 	}
 
 	var schedule [][2]int
 	w, h := monW, monH
 	for len(schedule) < maxDepth {
-		cols := clampInt(int(w/minPx), 1, maxCols)
-		rows := clampInt(int(h/minPx), 1, maxRows)
+		depth := len(schedule)
+		colCap := gridCapAtDepth(depth, maxCols)
+		rowCap := gridCapAtDepth(depth, maxRows)
+		cols := clampInt(int(w/minPx), 1, colCap)
+		rows := clampInt(int(h/minPx), 1, rowCap)
 		if cols == 1 && rows == 1 {
 			break // これ以上は読めるサイズに分割できない。
 		}
@@ -68,6 +78,25 @@ func GridSchedule(monW, monH float64, cfg Config) [][2]int {
 		schedule = append(schedule, [2]int{1, 1})
 	}
 	return schedule
+}
+
+// gridCapAtDepth は段の深さ(0始まり)に応じた最大グリッド(片軸)を返す。
+// 1〜2段目(depth 0,1)は広い領域を素早く絞り込むため base(通常5)まで密に分割し、
+// 3段目(depth 2)以降は上限を急に下げて下限3に張り付かせる(base=5 なら 5,5,3,3,…)。
+// これにより深い段ほどセルが大きく・キー数が少なくなり、ラベルが読みやすく操作も
+// 簡単になる。実際のグリッドは、この上限と MinLabelPx による上限の小さい方で決まる。
+func gridCapAtDepth(depth, base int) int {
+	if depth <= 1 {
+		return base
+	}
+	c := base - 2*(depth-1) // 3段目で base-2、以降さらに小さく
+	if c < 3 {
+		return 3
+	}
+	if c > base {
+		return base
+	}
+	return c
 }
 
 // clampInt は v を [lo, hi] の範囲に収める。

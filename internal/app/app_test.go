@@ -14,11 +14,13 @@ import (
 // app のオーケストレーションを Win32 なしで(=非 Windows でも)テストできる。
 
 type mockInput struct {
-	shift    bool
-	moved    [][2]int
-	clicks   []spatial.ClickAction
-	moveErr  error
-	clickErr error
+	shift         bool
+	alt           bool
+	shiftReleased bool
+	moved         [][2]int
+	clicks        []spatial.ClickAction
+	moveErr       error
+	clickErr      error
 }
 
 func (m *mockInput) MoveCursor(x, y int) error {
@@ -30,6 +32,8 @@ func (m *mockInput) Click(a spatial.ClickAction) error {
 	return m.clickErr
 }
 func (m *mockInput) ShiftHeld() bool { return m.shift }
+func (m *mockInput) AltHeld() bool   { return m.alt }
+func (m *mockInput) ReleaseShift()   { m.shiftReleased = true }
 
 type mockMonitors struct {
 	info monitor.Info
@@ -110,6 +114,10 @@ func TestShiftKeyClicksImmediately(t *testing.T) {
 	if len(in.moved) != 1 {
 		t.Fatalf("expected cursor move, got %v", in.moved)
 	}
+	// Shift+ラベルの即クリックでは、クリックに Shift が漏れないよう解除されるべき。
+	if !in.shiftReleased {
+		t.Fatal("Shift should be released before clicking")
+	}
 	if a.session.State() != session.StateIdle {
 		t.Fatalf("expected Idle after click, got %s", a.session.State())
 	}
@@ -117,11 +125,11 @@ func TestShiftKeyClicksImmediately(t *testing.T) {
 
 func TestLabelKeyAdvancesWithoutClicking(t *testing.T) {
 	a, in, ov := newTestApp(t)
-	a.onHotkey(spatial.ClickLeft) // 1920×1080 の予定表は3段
+	a.onHotkey(spatial.ClickLeft) // 1920×1080 の予定表は複数段(最終段以外では即クリックしない)
 	a.onKeyDown(uintptr(spatial.LabelKeys[0]))
 
 	if len(in.clicks) != 0 {
-		t.Fatalf("should not click at depth 1 of a 3-stage schedule, got %v", in.clicks)
+		t.Fatalf("should not click at depth 1 of a multi-stage schedule, got %v", in.clicks)
 	}
 	if ov.updates != 1 {
 		t.Fatalf("overlay should refresh once, got %d", ov.updates)
@@ -165,5 +173,36 @@ func TestBackspaceGoesBack(t *testing.T) {
 	}
 	if ov.updates != ovUpdatesBefore+1 {
 		t.Fatal("overlay should refresh after Backspace")
+	}
+}
+
+func TestAltPanShiftsGridWithoutSelecting(t *testing.T) {
+	a, in, ov := newTestApp(t)
+	a.onHotkey(spatial.ClickLeft)
+	in.alt = true
+
+	x0 := a.session.CurrentAnchors()[0].SourcePoint.X
+	depth0 := a.session.CurrentDepth()
+	updates0 := ov.updates
+
+	a.onKeyDown(vkSemicolon) // Alt+; → 右へパン
+
+	// パンは段を変えない(選択ではない)。
+	if a.session.CurrentDepth() != depth0 {
+		t.Fatalf("pan must not change depth: %d -> %d", depth0, a.session.CurrentDepth())
+	}
+	// クリック先(元座標)が右へ panStepPx ずれる。
+	x1 := a.session.CurrentAnchors()[0].SourcePoint.X
+	if x1 != x0+panStepPx {
+		t.Fatalf("expected source X to shift by %.0f (%.3f -> %.3f)", panStepPx, x0, x1)
+	}
+	if ov.updates != updates0+1 {
+		t.Fatalf("overlay should refresh once after pan, got %d", ov.updates-updates0)
+	}
+
+	// Alt 押下中の移動キー以外(ここでは Alt+A=ラベルキー)は無視され、絞り込まない。
+	a.onKeyDown(uintptr(spatial.LabelKeys[0]))
+	if a.session.CurrentDepth() != depth0 {
+		t.Fatalf("Alt+label must be ignored, depth changed to %d", a.session.CurrentDepth())
 	}
 }

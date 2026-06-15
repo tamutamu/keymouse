@@ -50,8 +50,8 @@ func Default() Config {
 
 		Cols:       5,
 		Rows:       5,
-		MinLabelPx: 20,
-		MaxDepth:   8,
+		MinLabelPx: 12,
+		MaxDepth:   3,
 
 		LabelSize: spatial.LabelNormal,
 

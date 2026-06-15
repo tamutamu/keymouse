@@ -22,10 +22,17 @@ const (
 	WM_PAINT      = 0x000F
 	WM_HOTKEY     = 0x0312
 	WM_KEYDOWN    = 0x0100
+	WM_SYSKEYDOWN = 0x0104 // Alt 押下中のキーは WM_KEYDOWN ではなくこちらで届く
 	WM_ERASEBKGND = 0x0014
 
 	// 仮想キーコード
-	VK_SHIFT = 0x10
+	VK_SHIFT  = 0x10
+	VK_MENU   = 0x12 // Alt キー
+	VK_LSHIFT = 0xA0
+	VK_RSHIFT = 0xA1
+
+	// keybd_event のフラグ
+	KEYEVENTF_KEYUP = 0x0002
 
 	// レイヤードウィンドウの属性
 	LWA_ALPHA = 0x00000002
@@ -70,6 +77,7 @@ var (
 	procGetClientRect              = user32.NewProc("GetClientRect")
 	procShowWindow                 = user32.NewProc("ShowWindow")
 	procGetKeyState                = user32.NewProc("GetKeyState")
+	procKeybdEvent                 = user32.NewProc("keybd_event")
 	procSetForegroundWindow        = user32.NewProc("SetForegroundWindow")
 	procSetFocus                   = user32.NewProc("SetFocus")
 	procSetCursorPos               = user32.NewProc("SetCursorPos")

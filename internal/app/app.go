@@ -14,7 +14,17 @@ import (
 const (
 	vkEscape = 0x1B // Esc: キャンセル
 	vkBack   = 0x08 // Backspace: 1 段階戻る
+
+	// Alt+(h/j/k/;) でグリッド全体を平行移動して微調整する(vim 風だが、右は
+	// Alt+L が左クリック開始ホットキーと衝突するため ; を用いる)。
+	vkH         = 0x48 // h: 左
+	vkJ         = 0x4A // j: 下
+	vkK         = 0x4B // k: 上
+	vkSemicolon = 0xBA // ; (VK_OEM_1): 右
 )
+
+// panStepPx はグリッド移動 1 回あたりの画面ピクセル移動量。
+const panStepPx = 8.0
 
 // App は選択セッションのオーケストレーションを担う中核オブジェクトである。
 // OS 依存処理はすべて Deps のポート経由で呼び出すため、本体は OS 非依存。
@@ -102,6 +112,13 @@ func (a *App) onKeyDown(vk uintptr) {
 		return
 	}
 
+	// Alt+(h/j/k/;) はグリッドの平行移動。Alt 押下中のキーはここで消費し、
+	// ラベル選択には回さない(移動キー以外の Alt+キーは無視する)。
+	if a.deps.Input.AltHeld() {
+		a.panGrid(vk)
+		return
+	}
+
 	switch vk {
 	case vkEscape:
 		// Esc: カーソル位置・クリック状態を変更せずにキャンセルする。
@@ -142,11 +159,38 @@ func (a *App) onKeyDown(vk uintptr) {
 	}
 }
 
+// panGrid は Alt+(h/j/k/;) に応じて現在のグリッドを平行移動し、再描画する。
+// 移動キー以外では何もしない。
+func (a *App) panGrid(vk uintptr) {
+	var dx, dy float64
+	switch vk {
+	case vkH:
+		dx = -panStepPx
+	case vkJ:
+		dy = panStepPx
+	case vkK:
+		dy = -panStepPx
+	case vkSemicolon:
+		dx = panStepPx
+	default:
+		return // 移動キーでなければ無視
+	}
+	if a.session.PanCurrentStage(dx, dy) {
+		if anchors := a.session.CurrentAnchors(); anchors != nil {
+			a.overlay.UpdateAnchors(anchors)
+		}
+	}
+}
+
 // executeClick はオーバーレイを隠し、カーソルを移動してクリックを送信する。
 func (a *App) executeClick(anchor spatial.Anchor) {
 	if a.overlay != nil {
 		a.overlay.Hide()
 	}
+
+	// Shift+ラベルで即クリックした場合、物理的に押された Shift がクリックに
+	// 漏れて Shift+クリックになるのを防ぐため、クリック前に Shift を解除する。
+	a.deps.Input.ReleaseShift()
 
 	x, y := spatial.SourcePointPhysical(anchor)
 	if err := a.deps.Input.MoveCursor(x, y); err != nil {

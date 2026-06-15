@@ -7,6 +7,7 @@ package overlay
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/tamutamu/keymouse/internal/spatial"
 	"github.com/tamutamu/keymouse/internal/win32"
@@ -62,7 +63,9 @@ func (o *Overlay) Show(anchors []spatial.Anchor, action spatial.ClickAction) {
 	o.action = action
 	o.window.Show()
 	o.window.Invalidate()
-	// キーボード入力(WM_KEYDOWN)を受け取れるようフォーカスを移す。
+	// キーボード入力(WM_KEYDOWN)を受け取れるよう、前面化してフォーカスを移す。
+	// ホットキー押下直後はフォアグラウンド権が付与されているため前面化が成功する。
+	win32.SetForegroundWindow(o.window.HWND)
 	win32.SetFocus(o.window.HWND)
 }
 
@@ -109,7 +112,9 @@ func (o *Overlay) handleMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr
 		// 背景消去は paint 側で行うため、ここでは何もせず処理済みを返す(ちらつき防止)。
 		return true, 1
 
-	case win32.WM_KEYDOWN:
+	case win32.WM_KEYDOWN, win32.WM_SYSKEYDOWN:
+		// WM_SYSKEYDOWN は Alt 押下中のキー(Alt+h/j/k/; のグリッド移動)で届く。
+		// どちらも同じハンドラへ渡し、処理済みとして既定処理(システムメニュー等)を抑止する。
 		if o.OnKeyDown != nil {
 			o.OnKeyDown(wParam)
 		}
@@ -149,15 +154,19 @@ func (o *Overlay) paint(hdc uintptr) {
 		win32.DeleteObject(bgBrush)
 	}
 
-	// 各アンカーのラベルを描画する。
-	fontSize := fontSizeMap[o.labelSize]
+	// セルの境界を示すグリッド線を描画する(現在の段の全セルの枠線)。
+	o.drawGridLines(memDC)
+
+	// 各アンカーのラベルを描画する。フォント高はセルに収まるよう自動調整する
+	// (段が深くセルが小さいほど小さくなり、隣のラベルと重ならない)。
+	fontSize := o.stageFontSize()
 	font := win32.CreateFontBold(fontSize)
 	if font != 0 {
 		oldFont := win32.SelectObject(memDC, font)
 		win32.SetBkMode(memDC, win32.TRANSPARENT)
 
 		for _, a := range o.anchors {
-			o.drawAnchorLabel(memDC, a)
+			o.drawAnchorLabel(memDC, a, fontSize)
 		}
 
 		win32.SelectObject(memDC, oldFont)
@@ -171,8 +180,69 @@ func (o *Overlay) paint(hdc uintptr) {
 	win32.BitBlt(hdc, 0, 0, w, h, memDC, 0, 0)
 }
 
+// stageFontSize は現在の段のセルサイズに収まるラベルフォント高(px)を返す。
+// 設定上のラベルサイズを上限とし、最小セルの短辺に対して十分小さくなるよう縮小する。
+// これにより最終段の小さなセルでもラベルが隣と重ならず、グリッド線と併せて判読できる。
+func (o *Overlay) stageFontSize() int {
+	configured := fontSizeMap[o.labelSize]
+	if configured == 0 {
+		configured = fontSizeMap[spatial.LabelNormal]
+	}
+	if len(o.anchors) == 0 {
+		return configured
+	}
+
+	// 全セルの中で最も短い辺を求める(最終行・最終列は余りを吸収して大きめなので、
+	// 通常セルの辺長が下限になる)。
+	minSide := math.MaxFloat64
+	for _, a := range o.anchors {
+		side := math.Min(a.DisplayRect.W, a.DisplayRect.H)
+		if side < minSide {
+			minSide = side
+		}
+	}
+
+	// セル短辺と同じ高さをフォント高とし、上限は設定値、下限は判読可能な10pxとする。
+	// 文字の実描画高はフォント高の約7割なので、等倍でも枠やグリッド線に触れない。
+	fit := int(minSide * 1.0)
+	if fit >= configured {
+		return configured
+	}
+	if fit < 10 {
+		fit = 10
+	}
+	return fit
+}
+
+// drawGridLines は現在の段の全セルの枠線(グリッド線)を描画する。
+func (o *Overlay) drawGridLines(hdc uintptr) {
+	brush := win32.CreateSolidBrush(win32.RGB(0x5A, 0x5A, 0x8C)) // 薄い青紫の線
+	if brush == 0 {
+		return
+	}
+	defer win32.DeleteObject(brush)
+
+	const t = 1 // 線の太さ(px)
+	for _, a := range o.anchors {
+		r := a.DisplayRect
+		x0, y0 := int32(r.X), int32(r.Y)
+		x1, y1 := int32(r.X+r.W), int32(r.Y+r.H)
+
+		top := win32.RECT{Left: x0, Top: y0, Right: x1, Bottom: y0 + t}
+		bottom := win32.RECT{Left: x0, Top: y1 - t, Right: x1, Bottom: y1}
+		left := win32.RECT{Left: x0, Top: y0, Right: x0 + t, Bottom: y1}
+		right := win32.RECT{Left: x1 - t, Top: y0, Right: x1, Bottom: y1}
+
+		win32.FillRect(hdc, &top, brush)
+		win32.FillRect(hdc, &bottom, brush)
+		win32.FillRect(hdc, &left, brush)
+		win32.FillRect(hdc, &right, brush)
+	}
+}
+
 // drawAnchorLabel は可読性のため縁取り(ハロー)付きで 1 つのラベルを描画する。
-func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor) {
+// fontSize は呼び出し側で算出した現在の段のフォント高(stageFontSize)。
+func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor, fontSize int) {
 	label := spatial.KeyToChar(a.Label)
 	if label == "" {
 		return
@@ -182,7 +252,6 @@ func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor) {
 	cx := int(a.DisplayRect.X + a.DisplayRect.W/2)
 	cy := int(a.DisplayRect.Y + a.DisplayRect.H/2)
 
-	fontSize := fontSizeMap[o.labelSize]
 	halfSize := fontSize / 2
 
 	// 暗いハロー/影を周囲 8 方向にオフセット描画する(明暗どちらの背景でも読めるように)。

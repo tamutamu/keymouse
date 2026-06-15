@@ -52,8 +52,12 @@ func CreateLayeredWindow(className string, rect RECT, handler MessageHandler) (*
 
 	classNamePtr2, _ := windows.UTF16PtrFromString(className)
 
+	// WS_EX_NOACTIVATE は付けない。オーバーレイは選択中だけキーボード入力
+	// (WM_KEYDOWN) を受け取る必要があり、そのためにはアクティブ化＝フォーカス
+	// 取得が可能でなければならない。WS_EX_TOOLWINDOW はタスクバー/Alt+Tab から
+	// 隠すためのもので、フォーカス取得は妨げない。
 	hwnd, _, err := procCreateWindowEx.Call(
-		uintptr(WS_EX_LAYERED|WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE),
+		uintptr(WS_EX_LAYERED|WS_EX_TOPMOST|WS_EX_TOOLWINDOW),
 		uintptr(unsafe.Pointer(classNamePtr2)),
 		0,
 		uintptr(WS_POPUP),
@@ -155,4 +159,11 @@ func GetClientRect(hwnd uintptr) RECT {
 // SetFocus は指定したウィンドウにキーボードフォーカスを与える。
 func SetFocus(hwnd uintptr) {
 	procSetFocus.Call(hwnd)
+}
+
+// SetForegroundWindow は指定したウィンドウを前面(フォアグラウンド)に出す。
+// ホットキー押下直後はフォアグラウンド権が一時的に付与されるため、この呼び出しで
+// オーバーレイを確実に前面化してキーボード入力を受け取れる状態にできる。
+func SetForegroundWindow(hwnd uintptr) {
+	procSetForegroundWindow.Call(hwnd)
 }

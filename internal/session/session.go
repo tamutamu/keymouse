@@ -166,6 +166,32 @@ func (s *Session) SelectKeyWithClick(k spatial.Key) (spatial.Anchor, bool) {
 	return spatial.Anchor{}, false
 }
 
+// PanCurrentStage は現在(最上段)のグリッドを画面座標で (dx,dy) だけ平行移動する。
+// 表示位置とクリック先の元座標を同じだけずらすため、セル中心の間にあたる任意の点へ
+// カーソルを到達させられる(段を増やさずに微調整できる)。表示=元座標が 1:1 の前提で、
+// 表示矩形・元領域・元座標すべてを同量ずらす。以降の絞り込みはずらした後の領域から派生する。
+// Selecting 中でなければ false を返す。
+func (s *Session) PanCurrentStage(dx, dy float64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state != StateSelecting || len(s.stages) == 0 {
+		return false
+	}
+	top := &s.stages[len(s.stages)-1]
+	top.SearchArea.X += dx
+	top.SearchArea.Y += dy
+	for i := range top.Anchors {
+		a := &top.Anchors[i]
+		a.DisplayRect.X += dx
+		a.DisplayRect.Y += dy
+		a.SourceArea.X += dx
+		a.SourceArea.Y += dy
+		a.SourcePoint.X += dx
+		a.SourcePoint.Y += dy
+	}
+	return true
+}
+
 // Backspace は最上段をポップする。残り1段(これ以上戻れない)の場合は何もせず false を返す。
 // 段をポップできた場合は true を返す。
 func (s *Session) Backspace() bool {
