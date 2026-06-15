@@ -1,0 +1,69 @@
+package spatial
+
+// LabelKeys はグリッドのラベルとして用いる固定の25個の英字キー集合である。
+// A〜Y の Win32 仮想キーコード(0x41〜0x59)で、配置方向には依存しない。
+var LabelKeys = []Key{
+	0x41, // A
+	0x42, // B
+	0x43, // C
+	0x44, // D
+	0x45, // E
+	0x46, // F
+	0x47, // G
+	0x48, // H
+	0x49, // I
+	0x4A, // J
+	0x4B, // K
+	0x4C, // L
+	0x4D, // M
+	0x4E, // N
+	0x4F, // O
+	0x50, // P
+	0x51, // Q
+	0x52, // R
+	0x53, // S
+	0x54, // T
+	0x55, // U
+	0x56, // V
+	0x57, // W
+	0x58, // X
+	0x59, // Y
+}
+
+// keyCharMap は A〜Y の Win32 VK コードを対応する文字列へ写像する。
+var keyCharMap = map[Key]string{
+	0x41: "A",
+	0x42: "B",
+	0x43: "C",
+	0x44: "D",
+	0x45: "E",
+	0x46: "F",
+	0x47: "G",
+	0x48: "H",
+	0x49: "I",
+	0x4A: "J",
+	0x4B: "K",
+	0x4C: "L",
+	0x4D: "M",
+	0x4E: "N",
+	0x4F: "O",
+	0x50: "P",
+	0x51: "Q",
+	0x52: "R",
+	0x53: "S",
+	0x54: "T",
+	0x55: "U",
+	0x56: "V",
+	0x57: "W",
+	0x58: "X",
+	0x59: "Y",
+}
+
+// KeyToChar は Win32 の仮想キーコードを対応する文字列へ変換する。
+// キーがラベル集合に含まれない場合は空文字列を返す。
+func KeyToChar(k Key) string {
+	if s, ok := keyCharMap[k]; ok {
+		return s
+	}
+	return ""
+}
