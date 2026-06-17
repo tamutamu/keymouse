@@ -52,12 +52,13 @@ func CreateLayeredWindow(className string, rect RECT, handler MessageHandler) (*
 
 	classNamePtr2, _ := windows.UTF16PtrFromString(className)
 
-	// WS_EX_NOACTIVATE は付けない。オーバーレイは選択中だけキーボード入力
-	// (WM_KEYDOWN) を受け取る必要があり、そのためにはアクティブ化＝フォーカス
-	// 取得が可能でなければならない。WS_EX_TOOLWINDOW はタスクバー/Alt+Tab から
-	// 隠すためのもので、フォーカス取得は妨げない。
+	// WS_EX_NOACTIVATE: フォーカスを奪わない(開いていたメニュー等を閉じさせない)。
+	// WS_EX_TRANSPARENT: マウスのヒットテストを透過(クリックスルー)する。これにより
+	// オーバーレイ表示中もカーソル下の判定は背後のウィンドウのままとなり、ホバーで
+	// 展開するメニュー等が「マウスが離れた」と判定されて閉じてしまうのを防ぐ。
+	// キー入力はフォーカス非依存の低レベルキーボードフック(hook_windows.go)で受け取る。
 	hwnd, _, err := procCreateWindowEx.Call(
-		uintptr(WS_EX_LAYERED|WS_EX_TOPMOST|WS_EX_TOOLWINDOW),
+		uintptr(WS_EX_LAYERED|WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_TRANSPARENT),
 		uintptr(unsafe.Pointer(classNamePtr2)),
 		0,
 		uintptr(WS_POPUP),
@@ -86,6 +87,11 @@ func (w *Window) DestroyWindow() {
 // Show はウィンドウを表示する。
 func (w *Window) Show() {
 	procShowWindow.Call(w.HWND, SW_SHOW)
+}
+
+// ShowNoActivate はウィンドウをアクティブ化せずに表示する(フォーカスを奪わない)。
+func (w *Window) ShowNoActivate() {
+	procShowWindow.Call(w.HWND, SW_SHOWNA)
 }
 
 // Hide はウィンドウを非表示にする。
@@ -154,16 +160,4 @@ func GetClientRect(hwnd uintptr) RECT {
 	var r RECT
 	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
 	return r
-}
-
-// SetFocus は指定したウィンドウにキーボードフォーカスを与える。
-func SetFocus(hwnd uintptr) {
-	procSetFocus.Call(hwnd)
-}
-
-// SetForegroundWindow は指定したウィンドウを前面(フォアグラウンド)に出す。
-// ホットキー押下直後はフォアグラウンド権が一時的に付与されるため、この呼び出しで
-// オーバーレイを確実に前面化してキーボード入力を受け取れる状態にできる。
-func SetForegroundWindow(hwnd uintptr) {
-	procSetForegroundWindow.Call(hwnd)
 }

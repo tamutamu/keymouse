@@ -87,6 +87,20 @@ func TextOut(dc uintptr, x, y int, text string) {
 		uintptr(unsafe.Pointer(&utf16[0])), uintptr(len(utf16)-1))
 }
 
+// TextExtent は現在 dc に選択されているフォントで text を描画したときの
+// 幅・高さ(ピクセル)を返す。ラベルをセル中心へ正確にセンタリングするために用いる。
+func TextExtent(dc uintptr, text string) (w, h int) {
+	utf16, err := windows.UTF16FromString(text)
+	if err != nil || len(utf16) == 0 {
+		return 0, 0
+	}
+	var sz SIZE
+	procGetTextExtentPoint32.Call(dc,
+		uintptr(unsafe.Pointer(&utf16[0])), uintptr(len(utf16)-1),
+		uintptr(unsafe.Pointer(&sz)))
+	return int(sz.CX), int(sz.CY)
+}
+
 // CreateFontBold は指定ピクセル高の太字 ClearType フォント (Segoe UI) を生成する。
 // 不要になったら DeleteObject で解放すること。
 func CreateFontBold(height int) uintptr {

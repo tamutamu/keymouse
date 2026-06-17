@@ -90,7 +90,14 @@ func (a *overlayAdapter) Show(anchors []spatial.Anchor, action spatial.ClickActi
 func (a *overlayAdapter) UpdateAnchors(anchors []spatial.Anchor) { a.ov.UpdateAnchors(anchors) }
 func (a *overlayAdapter) Hide()                                  { a.ov.Hide() }
 func (a *overlayAdapter) Destroy()                               { a.ov.Destroy() }
-func (a *overlayAdapter) SetKeyHandler(fn func(vk uintptr))      { a.ov.OnKeyDown = fn }
+
+// winHook は KeyHook ポートを Win32 の低レベルキーボードフックで実装する。
+type winHook struct{}
+
+func (winHook) Install(onKey func(vk uint32, down bool) bool) error {
+	return win32.SetKeyboardHook(onKey)
+}
+func (winHook) Remove() { win32.RemoveKeyboardHook() }
 
 // --- 構築と配線 ---
 
@@ -100,6 +107,7 @@ func New(cfg settings.Config) (*App, error) {
 		Input:          winInput{},
 		Monitors:       winMonitors{},
 		OverlayFactory: winOverlayFactory{},
+		Hook:           winHook{},
 	}
 	return newApp(cfg, deps), nil
 }
@@ -135,13 +143,21 @@ func (a *App) Run() error {
 	}
 	defer msgWin.DestroyWindow()
 
-	// ホットキー登録。失敗時は設定画面を開いて変更を促す。
+	// ホットキー登録(右クリック=Alt+R / ダブルクリック=Alt+D)。
+	// 左クリックは Shift 2連打で開くため、ここでは登録しない。
 	hotkeyMgr := input.New(msgWin.HWND, hotkeyConfigFrom(a.cfg))
 	if err := hotkeyMgr.Register(); err != nil {
 		log.Printf("hotkey registration failed: %v — edit config.json or settings to change hotkeys", err)
 		a.openSettings(msgWin.HWND)
 	}
 	defer hotkeyMgr.Unregister()
+
+	// 低レベルキーボードフックを常駐させる。待機中は Shift 2連打の検出に、選択中は
+	// フォーカス非依存のキー入力取得に用いる。終了時に解除する。
+	if err := a.deps.Hook.Install(a.onKeyHook); err != nil {
+		log.Printf("keyboard hook install failed: %v", err)
+	}
+	defer a.deps.Hook.Remove()
 
 	// タスクトレイ常駐。
 	trayIcon = tray.New(msgWin.HWND)
@@ -174,10 +190,10 @@ func (a *App) openSettings(parent uintptr) {
 	})
 }
 
-// hotkeyConfigFrom は settings.Config からホットキー構成マップを作る。
+// hotkeyConfigFrom は settings.Config から登録するホットキー構成マップを作る。
+// 左クリックは Shift 2連打で開くため、グローバルホットキーには含めない。
 func hotkeyConfigFrom(cfg settings.Config) map[spatial.ClickAction]input.HotkeyConfig {
 	return map[spatial.ClickAction]input.HotkeyConfig{
-		spatial.ClickLeft:   cfg.HotkeyLeft,
 		spatial.ClickRight:  cfg.HotkeyRight,
 		spatial.ClickDouble: cfg.HotkeyDouble,
 	}

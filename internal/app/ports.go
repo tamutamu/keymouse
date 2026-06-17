@@ -38,8 +38,6 @@ type Overlay interface {
 	UpdateAnchors(anchors []spatial.Anchor)
 	Hide()
 	Destroy()
-	// SetKeyHandler はオーバーレイがキー入力を受け取った際のコールバックを設定する。
-	SetKeyHandler(func(vk uintptr))
 }
 
 // OverlayFactory はモニターに合わせた Overlay を生成する。
@@ -47,9 +45,20 @@ type OverlayFactory interface {
 	NewOverlay(mon monitor.Info, size spatial.LabelSize) (Overlay, error)
 }
 
+// KeyHook は選択中のグローバルなキー入力取得を抽象化する。オーバーレイはフォーカスを
+// 奪わない(背後のメニュー等を維持する)ため、キーはフォーカス非依存のフックで受け取る。
+type KeyHook interface {
+	// Install はフックを設置する。onKey には押下/離上(down)と仮想キーが渡され、
+	// true を返したキーは他アプリへ届かない(飲み込まれる)。
+	Install(onKey func(vk uint32, down bool) bool) error
+	// Remove はフックを解除する。
+	Remove()
+}
+
 // Deps はオーケストレーション本体が必要とする依存(ポート)の集合である。
 type Deps struct {
 	Input          Input
 	Monitors       MonitorLocator
 	OverlayFactory OverlayFactory
+	Hook           KeyHook
 }

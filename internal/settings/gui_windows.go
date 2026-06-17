@@ -3,29 +3,21 @@
 package settings
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-
 	"github.com/tamutamu/keymouse/internal/win32"
 )
 
 // 本ファイルはネイティブ Win32 コントロールによる設定ダイアログを実装する。
 // ウィンドウ生成・コントロール生成・値の読み書きはすべて win32 パッケージの
 // ラッパー経由で行い、本パッケージから DLL を直接ロードすることはない。
+//
+// 設定項目は「PC起動時に起動するか(AutoStart)」のみ。グリッドやラベルサイズ等の
+// 動作パラメータは config.json での手編集に委ね、ダイアログには公開しない。
 
 const settingsClassName = "KeyMouseSettings"
 
 // 子コントロールのID
 const (
-	idEditVKLeft   = 202
-	idEditVKRight  = 204
-	idEditVKDouble = 206
-	idEditCols     = 208
-	idEditRows     = 210
-	idEditDepth    = 212
 	idChkAutoStart = 213
-	idChkTutorial  = 214
 	idBtnSave      = 215
 	idBtnCancel    = 216
 )
@@ -49,7 +41,7 @@ func OpenSettingsWindow(parent uintptr, cfg Config, onSave func(Config)) {
 
 	sw := &settingsWindow{cfg: cfg, onSave: onSave}
 	w, err := win32.CreateAppWindow(settingsClassName, "KeyMouse Settings",
-		100, 100, 400, 420, sw.handleMessage)
+		100, 100, 300, 150, sw.handleMessage)
 	if err != nil {
 		return
 	}
@@ -85,72 +77,20 @@ func (sw *settingsWindow) handleMessage(hwnd uintptr, msg uint32, wParam, lParam
 }
 
 // createControls は設定ウィンドウ内に子コントロールを配置する。
+// 公開する設定は「PC起動時に起動する」チェックボックスのみ。
 func (sw *settingsWindow) createControls(hwnd uintptr) {
-	y := 15
-	win32.CreateLabel(hwnd, "Hotkeys (virtual key code hex, e.g. 4C for L):", 10, y, 360, 20)
-	y += 25
-	win32.CreateLabel(hwnd, "Left click (VK):", 10, y, 130, 20)
-	win32.CreateEdit(hwnd, idEditVKLeft, fmt.Sprintf("%02X", sw.cfg.HotkeyLeft.VK), 145, y, 60, 22)
-	y += 28
-	win32.CreateLabel(hwnd, "Right click (VK):", 10, y, 130, 20)
-	win32.CreateEdit(hwnd, idEditVKRight, fmt.Sprintf("%02X", sw.cfg.HotkeyRight.VK), 145, y, 60, 22)
-	y += 28
-	win32.CreateLabel(hwnd, "Double click (VK):", 10, y, 130, 20)
-	win32.CreateEdit(hwnd, idEditVKDouble, fmt.Sprintf("%02X", sw.cfg.HotkeyDouble.VK), 145, y, 60, 22)
-	y += 38
-	win32.CreateLabel(hwnd, "Grid:", 10, y, 130, 20)
-	y += 25
-	win32.CreateLabel(hwnd, "Columns:", 10, y, 80, 20)
-	win32.CreateEdit(hwnd, idEditCols, strconv.Itoa(sw.cfg.Cols), 95, y, 50, 22)
-	win32.CreateLabel(hwnd, "Rows:", 175, y, 60, 20)
-	win32.CreateEdit(hwnd, idEditRows, strconv.Itoa(sw.cfg.Rows), 240, y, 50, 22)
-	y += 28
-	win32.CreateLabel(hwnd, "Max depth:", 10, y, 80, 20)
-	win32.CreateEdit(hwnd, idEditDepth, strconv.Itoa(sw.cfg.MaxDepth), 95, y, 50, 22)
-	y += 38
-	win32.CreateCheckbox(hwnd, idChkAutoStart, "Start with Windows", 10, y, 200, 22, sw.cfg.AutoStart)
-	y += 28
-	win32.CreateCheckbox(hwnd, idChkTutorial, "Show tutorial on next start", 10, y, 220, 22, sw.cfg.ShowTutorialOnce)
-	y += 40
-	win32.CreateButton(hwnd, idBtnSave, "Save", 220, y, 70, 28, true)
-	win32.CreateButton(hwnd, idBtnCancel, "Cancel", 300, y, 70, 28, false)
+	win32.CreateCheckbox(hwnd, idChkAutoStart, "Start with Windows", 15, 20, 220, 22, sw.cfg.AutoStart)
+	win32.CreateButton(hwnd, idBtnSave, "Save", 110, 65, 80, 28, true)
+	win32.CreateButton(hwnd, idBtnCancel, "Cancel", 195, 65, 80, 28, false)
 }
 
 // saveAndClose は入力値を読み取って Config を更新・保存し、ウィンドウを閉じる。
+// 編集対象は AutoStart のみで、それ以外のフィールドは元の値をそのまま書き戻す。
 func (sw *settingsWindow) saveAndClose() {
 	hwnd := sw.window.HWND
 
-	// 16 進文字列の仮想キーコードを読み取る。解釈できなければ 0 を返す。
-	readVK := func(id int) uint32 {
-		s := strings.TrimSpace(win32.GetDlgItemText(hwnd, id))
-		v, err := strconv.ParseUint(s, 16, 32)
-		if err != nil {
-			return 0
-		}
-		return uint32(v)
-	}
-
 	cfg := sw.cfg
-	if vk := readVK(idEditVKLeft); vk != 0 {
-		cfg.HotkeyLeft.VK = vk
-	}
-	if vk := readVK(idEditVKRight); vk != 0 {
-		cfg.HotkeyRight.VK = vk
-	}
-	if vk := readVK(idEditVKDouble); vk != 0 {
-		cfg.HotkeyDouble.VK = vk
-	}
-	if v := win32.GetDlgItemInt(hwnd, idEditCols); v > 0 {
-		cfg.Cols = v
-	}
-	if v := win32.GetDlgItemInt(hwnd, idEditRows); v > 0 {
-		cfg.Rows = v
-	}
-	if v := win32.GetDlgItemInt(hwnd, idEditDepth); v > 0 {
-		cfg.MaxDepth = v
-	}
 	cfg.AutoStart = win32.IsDlgButtonChecked(hwnd, idChkAutoStart)
-	cfg.ShowTutorialOnce = win32.IsDlgButtonChecked(hwnd, idChkTutorial)
 
 	if err := Save(cfg); err != nil {
 		win32.MessageBox(hwnd, "Failed to save settings: "+err.Error(), "Error",

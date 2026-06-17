@@ -10,12 +10,13 @@ import "golang.org/x/sys/windows"
 // 本パッケージ全体で使用する Win32 定数。
 const (
 	// ウィンドウスタイル
-	WS_POPUP         = 0x80000000
-	WS_VISIBLE       = 0x10000000
-	WS_EX_LAYERED    = 0x00080000
-	WS_EX_TOPMOST    = 0x00000008
-	WS_EX_TOOLWINDOW = 0x00000080
-	WS_EX_NOACTIVATE = 0x08000000
+	WS_POPUP          = 0x80000000
+	WS_VISIBLE        = 0x10000000
+	WS_EX_LAYERED     = 0x00080000
+	WS_EX_TOPMOST     = 0x00000008
+	WS_EX_TOOLWINDOW  = 0x00000080
+	WS_EX_NOACTIVATE  = 0x08000000
+	WS_EX_TRANSPARENT = 0x00000020 // マウスヒットテストを透過(クリックスルー)
 
 	// ウィンドウメッセージ
 	WM_DESTROY    = 0x0002
@@ -33,6 +34,9 @@ const (
 
 	// keybd_event のフラグ
 	KEYEVENTF_KEYUP = 0x0002
+
+	// 低レベルキーボードフック
+	WH_KEYBOARD_LL = 13
 
 	// レイヤードウィンドウの属性
 	LWA_ALPHA = 0x00000002
@@ -54,8 +58,9 @@ const (
 	MONITOR_DEFAULTTONEAREST = 2
 
 	// ShowWindow 定数
-	SW_SHOW = 5
-	SW_HIDE = 0
+	SW_SHOW   = 5
+	SW_SHOWNA = 8 // アクティブ化せずに表示(フォーカスを奪わない)
+	SW_HIDE   = 0
 )
 
 var (
@@ -76,10 +81,12 @@ var (
 	procSetLayeredWindowAttributes = user32.NewProc("SetLayeredWindowAttributes")
 	procGetClientRect              = user32.NewProc("GetClientRect")
 	procShowWindow                 = user32.NewProc("ShowWindow")
-	procGetKeyState                = user32.NewProc("GetKeyState")
+	procGetAsyncKeyState           = user32.NewProc("GetAsyncKeyState")
 	procKeybdEvent                 = user32.NewProc("keybd_event")
 	procSetForegroundWindow        = user32.NewProc("SetForegroundWindow")
-	procSetFocus                   = user32.NewProc("SetFocus")
+	procSetWindowsHookEx           = user32.NewProc("SetWindowsHookExW")
+	procUnhookWindowsHookEx        = user32.NewProc("UnhookWindowsHookEx")
+	procCallNextHookEx             = user32.NewProc("CallNextHookEx")
 	procSetCursorPos               = user32.NewProc("SetCursorPos")
 	procSendInput                  = user32.NewProc("SendInput")
 	procGetDoubleClickTime         = user32.NewProc("GetDoubleClickTime")
@@ -102,6 +109,7 @@ var (
 	procSetBkMode              = gdi32.NewProc("SetBkMode")
 	procSetTextColor           = gdi32.NewProc("SetTextColor")
 	procTextOut                = gdi32.NewProc("TextOutW")
+	procGetTextExtentPoint32   = gdi32.NewProc("GetTextExtentPoint32W")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 )
@@ -114,6 +122,11 @@ type RECT struct {
 // POINT は Win32 の POINT 構造体に対応する。
 type POINT struct {
 	X, Y int32
+}
+
+// SIZE は Win32 の SIZE 構造体に対応する(幅・高さ)。
+type SIZE struct {
+	CX, CY int32
 }
 
 // MSG は Win32 の MSG 構造体に対応する。

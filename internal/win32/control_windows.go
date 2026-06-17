@@ -10,7 +10,7 @@ import (
 )
 
 // 本ファイルは設定ダイアログ等で使う「通常ウィンドウ」と標準子コントロール
-// (ラベル/テキスト入力/チェックボックス/ボタン)生成のラッパーを提供する。
+// (チェックボックス/ボタン)生成のラッパーを提供する。
 // これにより settings パッケージが Win32 のウィンドウクラス登録・WndProc・
 // DLL ロードを自前で持つ必要がなくなる。
 
@@ -18,7 +18,6 @@ const (
 	// 子コントロール用ウィンドウスタイル
 	WS_CHILD   = 0x40000000
 	WS_TABSTOP = 0x00010000
-	WS_BORDER  = 0x00800000
 
 	// 通常ウィンドウのスタイル (WS_OVERLAPPED|CAPTION|SYSMENU|MINIMIZEBOX|VISIBLE)
 	wsAppWindow = 0x10CF0000
@@ -44,8 +43,6 @@ const (
 
 var (
 	procSendMessage        = user32.NewProc("SendMessageW")
-	procGetDlgItemText     = user32.NewProc("GetDlgItemTextW")
-	procGetDlgItemInt      = user32.NewProc("GetDlgItemInt")
 	procSendDlgItemMessage = user32.NewProc("SendDlgItemMessageW")
 )
 
@@ -100,12 +97,8 @@ func createChild(parent uintptr, class, text string, style uint32, id, x, y, wid
 	hInstance, _, _ := procGetModuleHandle.Call(0)
 	clsPtr, _ := windows.UTF16PtrFromString(class)
 	textPtr, _ := windows.UTF16PtrFromString(text)
-	var exStyle uintptr
-	if class == "EDIT" {
-		exStyle = WS_BORDER
-	}
 	h, _, _ := procCreateWindowEx.Call(
-		exStyle,
+		0,
 		uintptr(unsafe.Pointer(clsPtr)),
 		uintptr(unsafe.Pointer(textPtr)),
 		uintptr(style),
@@ -113,16 +106,6 @@ func createChild(parent uintptr, class, text string, style uint32, id, x, y, wid
 		parent, uintptr(id), hInstance, 0,
 	)
 	return h
-}
-
-// CreateLabel は読み取り専用の静的ラベル(STATIC)を生成する。
-func CreateLabel(parent uintptr, text string, x, y, width, height int) {
-	createChild(parent, "STATIC", text, WS_CHILD|WS_VISIBLE, 0, x, y, width, height)
-}
-
-// CreateEdit は 1 行テキスト入力欄(EDIT)を生成する。id は後で値を読むための識別子。
-func CreateEdit(parent uintptr, id int, text string, x, y, width, height int) {
-	createChild(parent, "EDIT", text, WS_CHILD|WS_VISIBLE|WS_TABSTOP, id, x, y, width, height)
 }
 
 // CreateCheckbox はチェックボックス(BUTTON+BS_AUTOCHECKBOX)を生成し、初期状態を設定する。
@@ -140,19 +123,6 @@ func CreateButton(parent uintptr, id int, text string, x, y, width, height int, 
 		style = WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON
 	}
 	createChild(parent, "BUTTON", text, style, id, x, y, width, height)
-}
-
-// GetDlgItemText は親ウィンドウ内の id を持つコントロールの文字列を返す。
-func GetDlgItemText(hwnd uintptr, id int) string {
-	buf := make([]uint16, 64)
-	procGetDlgItemText.Call(hwnd, uintptr(id), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-	return windows.UTF16ToString(buf)
-}
-
-// GetDlgItemInt は id を持つコントロールの内容を符号なし整数として返す。
-func GetDlgItemInt(hwnd uintptr, id int) int {
-	v, _, _ := procGetDlgItemInt.Call(hwnd, uintptr(id), 0, 0)
-	return int(v)
 }
 
 // IsDlgButtonChecked は id を持つチェックボックスがチェック済みなら true を返す。

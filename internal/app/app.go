@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"time"
 
 	"github.com/tamutamu/keymouse/internal/input"
 	"github.com/tamutamu/keymouse/internal/monitor"
@@ -15,16 +16,43 @@ const (
 	vkEscape = 0x1B // Esc: キャンセル
 	vkBack   = 0x08 // Backspace: 1 段階戻る
 
-	// Alt+(h/j/k/;) でグリッド全体を平行移動して微調整する(vim 風だが、右は
-	// Alt+L が左クリック開始ホットキーと衝突するため ; を用いる)。
-	vkH         = 0x48 // h: 左
-	vkJ         = 0x4A // j: 下
-	vkK         = 0x4B // k: 上
-	vkSemicolon = 0xBA // ; (VK_OEM_1): 右
+	// Alt+(h/j/k/l) でグリッド全体を平行移動して微調整する(vim 流)。
+	// 左クリック開始ホットキーを Alt+N にしたことで Alt+L が空き、右に使える。
+	vkH = 0x48 // h: 左
+	vkJ = 0x4A // j: 下
+	vkK = 0x4B // k: 上
+	vkL = 0x4C // l: 右
 )
 
 // panStepPx はグリッド移動 1 回あたりの画面ピクセル移動量。
 const panStepPx = 8.0
+
+// shiftDoubleTapWindow は Shift 2連打とみなす最大間隔。
+const shiftDoubleTapWindow = 400 * time.Millisecond
+
+// Shift 系の仮想キーコード(左右個別キーを含む)。
+const (
+	vkShift  = 0x10
+	vkLShift = 0xA0
+	vkRShift = 0xA1
+)
+
+// isShiftVK は vk が Shift 系キーなら true を返す。
+func isShiftVK(vk uint32) bool {
+	return vk == vkShift || vk == vkLShift || vk == vkRShift
+}
+
+// isModifierVK は vk が Shift/Ctrl/Alt のいずれかなら true を返す。
+// これらは選択中も飲み込まず通過させる(システムの修飾状態を壊さないため)。
+func isModifierVK(vk uint32) bool {
+	switch vk {
+	case vkShift, vkLShift, vkRShift, // Shift
+		0x11, 0xA2, 0xA3, // Ctrl
+		0x12, 0xA4, 0xA5: // Alt
+		return true
+	}
+	return false
+}
 
 // App は選択セッションのオーケストレーションを担う中核オブジェクトである。
 // OS 依存処理はすべて Deps のポート経由で呼び出すため、本体は OS 非依存。
@@ -34,6 +62,11 @@ type App struct {
 	deps    Deps
 
 	overlay Overlay
+
+	// shiftTap は待機中の Shift 2連打(オーバーレイ起動操作)を検出する。
+	shiftTap *input.DoubleTap
+	// shiftDown は Shift の物理押下状態(オートリピートと新規押下の区別に使う)。
+	shiftDown bool
 }
 
 // newApp は設定と依存ポートから App を構築する(OS 非依存の内部コンストラクタ)。
@@ -45,9 +78,10 @@ func newApp(cfg settings.Config, deps Deps) *App {
 		MaxDepth:   cfg.MaxDepth,
 	}
 	return &App{
-		cfg:     cfg,
-		session: session.New(spatialCfg, spatial.LabelKeys),
-		deps:    deps,
+		cfg:      cfg,
+		session:  session.New(spatialCfg, spatial.LabelKeys),
+		deps:     deps,
+		shiftTap: input.NewDoubleTap(shiftDoubleTapWindow),
 	}
 }
 
@@ -95,8 +129,44 @@ func (a *App) onHotkey(action spatial.ClickAction) {
 		return
 	}
 	a.overlay = ov
-	a.overlay.SetKeyHandler(a.onKeyDown)
 	a.overlay.Show(a.session.CurrentAnchors(), action)
+}
+
+// onKeyHook は常駐キーボードフックからの全キー通知を処理する。
+// 戻り値 true はそのキーを飲み込む(背後アプリへ渡さない)ことを意味するが、
+// 修飾キーは win32 層が常に通過させるため、実質的に飲み込まれるのは非修飾キーのみ。
+//
+//   - 待機中(Idle): Shift の2連打でオーバーレイを開く。通常入力は一切飲み込まない。
+//   - 選択中(Selecting): 非修飾キーの押下を onKeyDown へ回し、飲み込む。
+func (a *App) onKeyHook(vk uint32, down bool) bool {
+	// Shift の物理押下状態を更新し、新規押下(オートリピートでない)を判定する。
+	freshShiftPress := false
+	if isShiftVK(vk) {
+		if down {
+			freshShiftPress = !a.shiftDown
+			a.shiftDown = true
+		} else {
+			a.shiftDown = false
+		}
+	}
+
+	if a.session.State() == session.StateSelecting {
+		if down && !isModifierVK(vk) {
+			a.onKeyDown(uintptr(vk))
+		}
+		return !isModifierVK(vk) // 非修飾キーは飲み込む(背後へ漏らさない)
+	}
+
+	// 待機中: Shift 2連打の検出。誤発火を避けるため、Shift 以外の押下で連打を破棄する。
+	switch {
+	case freshShiftPress:
+		if a.shiftTap.Tap(time.Now()) {
+			a.onHotkey(spatial.ClickLeft)
+		}
+	case down && !isShiftVK(vk):
+		a.shiftTap.Reset()
+	}
+	return false // 待機中は何も飲み込まない
 }
 
 // onKeyDown はオーバーレイから渡された WM_KEYDOWN を処理する。
@@ -112,7 +182,7 @@ func (a *App) onKeyDown(vk uintptr) {
 		return
 	}
 
-	// Alt+(h/j/k/;) はグリッドの平行移動。Alt 押下中のキーはここで消費し、
+	// Alt+(h/j/k/l) はグリッドの平行移動。Alt 押下中のキーはここで消費し、
 	// ラベル選択には回さない(移動キー以外の Alt+キーは無視する)。
 	if a.deps.Input.AltHeld() {
 		a.panGrid(vk)
@@ -170,7 +240,7 @@ func (a *App) panGrid(vk uintptr) {
 		dy = panStepPx
 	case vkK:
 		dy = -panStepPx
-	case vkSemicolon:
+	case vkL:
 		dx = panStepPx
 	default:
 		return // 移動キーでなければ無視
@@ -215,6 +285,7 @@ func (a *App) cancelSession() {
 }
 
 // cleanup はオーバーレイを破棄する(セッション終了時の後始末)。
+// キーボードフックは Shift 2連打の検出のため常駐させ続けるので、ここでは解除しない。
 func (a *App) cleanup() {
 	if a.overlay != nil {
 		a.overlay.Destroy()

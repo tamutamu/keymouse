@@ -29,14 +29,13 @@ var fontSizeMap = map[spatial.LabelSize]int{
 const overlayAlpha = 140
 
 // Overlay は選択ラベルを描画する全画面レイヤードウィンドウを表す。
+// キー入力はフォーカスに依存しないキーボードフックで受け取るため、本ウィンドウは
+// フォーカスを奪わず(WS_EX_NOACTIVATE)、キーメッセージも扱わない。
 type Overlay struct {
 	window    *win32.Window
 	anchors   []spatial.Anchor
 	action    spatial.ClickAction
 	labelSize spatial.LabelSize
-
-	// OnKeyDown はオーバーレイが WM_KEYDOWN を受け取った際に呼ばれる。
-	OnKeyDown func(vk uintptr)
 }
 
 // New は monRect で示すモニターを覆うオーバーレイウィンドウを生成する(表示はしない)。
@@ -61,12 +60,9 @@ func New(monRect win32.RECT, labelSize spatial.LabelSize) (*Overlay, error) {
 func (o *Overlay) Show(anchors []spatial.Anchor, action spatial.ClickAction) {
 	o.anchors = anchors
 	o.action = action
-	o.window.Show()
+	// フォーカスを奪わずに表示する(背後のメニュー等を閉じさせない)。
+	o.window.ShowNoActivate()
 	o.window.Invalidate()
-	// キーボード入力(WM_KEYDOWN)を受け取れるよう、前面化してフォーカスを移す。
-	// ホットキー押下直後はフォアグラウンド権が付与されているため前面化が成功する。
-	win32.SetForegroundWindow(o.window.HWND)
-	win32.SetFocus(o.window.HWND)
 }
 
 // UpdateAnchors は現在のアンカー集合を差し替えて再描画する。
@@ -111,14 +107,6 @@ func (o *Overlay) handleMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr
 	case win32.WM_ERASEBKGND:
 		// 背景消去は paint 側で行うため、ここでは何もせず処理済みを返す(ちらつき防止)。
 		return true, 1
-
-	case win32.WM_KEYDOWN, win32.WM_SYSKEYDOWN:
-		// WM_SYSKEYDOWN は Alt 押下中のキー(Alt+h/j/k/; のグリッド移動)で届く。
-		// どちらも同じハンドラへ渡し、処理済みとして既定処理(システムメニュー等)を抑止する。
-		if o.OnKeyDown != nil {
-			o.OnKeyDown(wParam)
-		}
-		return true, 0
 	}
 	return false, 0
 }
@@ -166,7 +154,7 @@ func (o *Overlay) paint(hdc uintptr) {
 		win32.SetBkMode(memDC, win32.TRANSPARENT)
 
 		for _, a := range o.anchors {
-			o.drawAnchorLabel(memDC, a, fontSize)
+			o.drawAnchorLabel(memDC, a)
 		}
 
 		win32.SelectObject(memDC, oldFont)
@@ -241,8 +229,9 @@ func (o *Overlay) drawGridLines(hdc uintptr) {
 }
 
 // drawAnchorLabel は可読性のため縁取り(ハロー)付きで 1 つのラベルを描画する。
-// fontSize は呼び出し側で算出した現在の段のフォント高(stageFontSize)。
-func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor, fontSize int) {
+// クリック先はセル中心なので、文字の実寸を測ってセル中心へ正確にセンタリングする
+// (固定の fontSize/2 では1文字の実幅とずれ、クリックが視覚より右にずれてしまう)。
+func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor) {
 	label := spatial.KeyToChar(a.Label)
 	if label == "" {
 		return
@@ -252,18 +241,21 @@ func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor, fontSize int) {
 	cx := int(a.DisplayRect.X + a.DisplayRect.W/2)
 	cy := int(a.DisplayRect.Y + a.DisplayRect.H/2)
 
-	halfSize := fontSize / 2
+	// 文字の実寸から左上原点を求め、セル中心に合わせる。
+	tw, th := win32.TextExtent(hdc, label)
+	x := cx - tw/2
+	y := cy - th/2
 
 	// 暗いハロー/影を周囲 8 方向にオフセット描画する(明暗どちらの背景でも読めるように)。
 	offsets := [][2]int{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}, {0, -2}, {0, 2}, {-2, 0}, {2, 0}}
 	win32.SetTextColor(hdc, win32.RGB(0x00, 0x00, 0x00))
 	for _, off := range offsets {
-		win32.TextOut(hdc, cx-halfSize+off[0], cy-halfSize+off[1], label)
+		win32.TextOut(hdc, x+off[0], y+off[1], label)
 	}
 
 	// 明るい本体テキストを描画する。
 	win32.SetTextColor(hdc, win32.RGB(0xFF, 0xFF, 0x00)) // 黄色
-	win32.TextOut(hdc, cx-halfSize, cy-halfSize, label)
+	win32.TextOut(hdc, x, y, label)
 }
 
 // drawStatusBar は画面下部に操作ヒント(クリック種別・操作キー)を描画する。

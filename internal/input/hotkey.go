@@ -26,10 +26,12 @@ type HotkeyConfig struct {
 	Modifiers uint32 `json:"modifiers"`
 }
 
-// DefaultHotkeys は既定のホットキー構成(Alt+L=左 / Alt+R=右 / Alt+D=ダブル)を返す。
+// DefaultHotkeys は既定のホットキー構成(Alt+N=左 / Alt+R=右 / Alt+D=ダブル)を返す。
+// 左クリックは Alt+N。Alt+L を空けることで、オーバーレイ表示中の右方向パンを
+// vim 流の Alt+l に割り当てられる(Alt+h/j/k/l)。
 func DefaultHotkeys() map[spatial.ClickAction]HotkeyConfig {
 	return map[spatial.ClickAction]HotkeyConfig{
-		spatial.ClickLeft:   {VK: 0x4C, Modifiers: ModAlt | ModNoRepeat}, // Alt+L
+		spatial.ClickLeft:   {VK: 0x4E, Modifiers: ModAlt | ModNoRepeat}, // Alt+N
 		spatial.ClickRight:  {VK: 0x52, Modifiers: ModAlt | ModNoRepeat}, // Alt+R
 		spatial.ClickDouble: {VK: 0x44, Modifiers: ModAlt | ModNoRepeat}, // Alt+D
 	}

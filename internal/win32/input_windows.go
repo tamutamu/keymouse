@@ -65,16 +65,22 @@ func ClickDouble() error {
 	return sendMouseInput(MOUSEEVENTF_LEFTUP)
 }
 
-// IsShiftPressed は左右いずれかの Shift キーが現在押されていれば true を返す。
+// IsShiftPressed は Shift キーが押されていれば true を返す。
+// キーボードフック設置中はフックが追跡する状態を、未設置時は物理状態を用いる
+// (フックがキーを飲み込むため、フック中は GetAsyncKeyState が当てにならない)。
 func IsShiftPressed() bool {
-	state, _, _ := procGetKeyState.Call(VK_SHIFT)
-	return state&KEY_PRESSED != 0
+	if kbHook != 0 {
+		return hookShiftDown
+	}
+	return asyncKeyDown(VK_SHIFT)
 }
 
-// IsAltPressed は Alt キーが現在押されていれば true を返す。
+// IsAltPressed は Alt キーが押されていれば true を返す(判定方針は IsShiftPressed と同じ)。
 func IsAltPressed() bool {
-	state, _, _ := procGetKeyState.Call(VK_MENU)
-	return state&KEY_PRESSED != 0
+	if kbHook != 0 {
+		return hookAltDown
+	}
+	return asyncKeyDown(VK_MENU)
 }
 
 // ReleaseShift は左右の Shift キーのキーアップを合成送信し、押下状態を解除する。

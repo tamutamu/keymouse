@@ -52,13 +52,24 @@ func (m *mockOverlay) Show(a []spatial.Anchor, act spatial.ClickAction) { m.show
 func (m *mockOverlay) UpdateAnchors(a []spatial.Anchor)                 { m.updates++ }
 func (m *mockOverlay) Hide()                                            { m.shown = false }
 func (m *mockOverlay) Destroy()                                         { m.destroyed = true }
-func (m *mockOverlay) SetKeyHandler(fn func(uintptr))                   {}
 
 type mockOverlayFactory struct{ ov *mockOverlay }
 
 func (m *mockOverlayFactory) NewOverlay(mon monitor.Info, size spatial.LabelSize) (Overlay, error) {
 	return m.ov, nil
 }
+
+type mockHook struct {
+	installed bool
+	onKey     func(vk uint32, down bool) bool
+}
+
+func (m *mockHook) Install(onKey func(vk uint32, down bool) bool) error {
+	m.installed = true
+	m.onKey = onKey
+	return nil
+}
+func (m *mockHook) Remove() { m.installed = false }
 
 // newTestApp は既定設定とモック依存で App を構築するヘルパー。
 func newTestApp(t *testing.T) (*App, *mockInput, *mockOverlay) {
@@ -69,6 +80,7 @@ func newTestApp(t *testing.T) (*App, *mockInput, *mockOverlay) {
 		Input:          in,
 		Monitors:       &mockMonitors{info: monitor.Info{Left: 0, Top: 0, Right: 1920, Bottom: 1080}},
 		OverlayFactory: &mockOverlayFactory{ov: ov},
+		Hook:           &mockHook{},
 	}
 	return newApp(settings.Default(), deps), in, ov
 }
@@ -176,6 +188,54 @@ func TestBackspaceGoesBack(t *testing.T) {
 	}
 }
 
+func TestShiftDoubleTapOpensOverlay(t *testing.T) {
+	a, _, ov := newTestApp(t)
+
+	// Shift の新規押下→離上→新規押下(短時間)でオーバーレイが開く。
+	a.onKeyHook(vkShift, true)
+	a.onKeyHook(vkShift, false)
+	a.onKeyHook(vkShift, true)
+
+	if a.session.State() != session.StateSelecting {
+		t.Fatalf("expected Selecting after double Shift tap, got %s", a.session.State())
+	}
+	if !ov.shown {
+		t.Fatal("overlay should be shown after double Shift tap")
+	}
+}
+
+func TestSingleShiftDoesNotOpen(t *testing.T) {
+	a, _, ov := newTestApp(t)
+	a.onKeyHook(vkShift, true)
+	a.onKeyHook(vkShift, false)
+	if a.session.State() != session.StateIdle || ov.shown {
+		t.Fatal("single Shift tap must not open overlay")
+	}
+}
+
+func TestShiftThenOtherKeyDoesNotOpen(t *testing.T) {
+	a, _, ov := newTestApp(t)
+	a.onKeyHook(vkShift, true)  // 1打目
+	a.onKeyHook(vkShift, false) //
+	a.onKeyHook(0x41, true)     // 別キー(A)で連打シーケンスを破棄
+	a.onKeyHook(0x41, false)
+	a.onKeyHook(vkShift, true) // これは新たな1打目扱い
+	if a.session.State() != session.StateIdle || ov.shown {
+		t.Fatal("Shift, other key, Shift must not open overlay")
+	}
+}
+
+func TestShiftAutoRepeatDoesNotOpen(t *testing.T) {
+	a, _, ov := newTestApp(t)
+	// Shift 押しっぱなしのオートリピート(離上なしの連続 down)は1打目のまま。
+	a.onKeyHook(vkShift, true)
+	a.onKeyHook(vkShift, true)
+	a.onKeyHook(vkShift, true)
+	if a.session.State() != session.StateIdle || ov.shown {
+		t.Fatal("auto-repeat Shift must not open overlay")
+	}
+}
+
 func TestAltPanShiftsGridWithoutSelecting(t *testing.T) {
 	a, in, ov := newTestApp(t)
 	a.onHotkey(spatial.ClickLeft)
@@ -185,7 +245,7 @@ func TestAltPanShiftsGridWithoutSelecting(t *testing.T) {
 	depth0 := a.session.CurrentDepth()
 	updates0 := ov.updates
 
-	a.onKeyDown(vkSemicolon) // Alt+; → 右へパン
+	a.onKeyDown(vkL) // Alt+l → 右へパン
 
 	// パンは段を変えない(選択ではない)。
 	if a.session.CurrentDepth() != depth0 {
