@@ -7,6 +7,10 @@ the keyboard. It opens a lightweight overlay on the monitor under the cursor,
 narrows the target area through labeled grid selections, and sends a left,
 right, or double click at the selected point.
 
+## Demo
+
+![keymouse demo](assets/keymouse-demo.gif)
+
 ## Features
 
 - Keyboard-only pointer targeting for Windows
