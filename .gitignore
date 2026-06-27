@@ -40,3 +40,4 @@ ehthumbs.db
 *.bak
 debug/
 tmp/
+dist/

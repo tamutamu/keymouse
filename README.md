@@ -2,14 +2,37 @@
 
 README: English | [日本語](README_ja.md)
 
-keymouse is a Windows tray app for clicking any point on the screen using only
-the keyboard. It opens a lightweight overlay on the monitor under the cursor,
-narrows the target area through labeled grid selections, and sends a left,
-right, or double click at the selected point.
-
-## Demo
+Click anywhere on Windows without touching your mouse.
 
 ![keymouse demo](assets/keymouse-demo.gif)
+
+keymouse is a tiny Windows tray app for people who prefer to keep their hands on
+the keyboard. Double-tap `Shift`, choose grid labels, and send a left, right, or
+double click at the selected point.
+
+No telemetry. No network. No account. Just a local keyboard-first mouse helper.
+
+## Why?
+
+Even with Vimium, terminal workflows, and keyboard shortcuts, desktop apps still
+force you to reach for the mouse.
+
+keymouse gives Windows a simple recursive grid clicker: press a hotkey, narrow
+the target area, click.
+
+## Install
+
+Download the latest `keymouse-vX.Y.Z-windows-amd64.zip` from
+[Releases](https://github.com/tamutamu/keymouse/releases), unzip it, and run
+`keymouse.exe`.
+
+Then double-tap `Shift` to start.
+
+If a release is not available yet, build from source:
+
+```powershell
+.\build.ps1
+```
 
 ## Features
 
@@ -25,13 +48,24 @@ right, or double click at the selected point.
 - Optional Windows startup registration
 - Local-only behavior; no telemetry or network communication
 
+## Positioning
+
+keymouse is intentionally small.
+
+| Tool | Focus |
+| --- | --- |
+| keymouse | Lightweight Windows tray app for grid-based clicking |
+| mousemaster | Advanced mouseless control and key remapping |
+| keynavish | Windows keynav-compatible mouse control |
+| Windows Mouse Keys | Built-in accessibility cursor movement |
+
 ## Requirements
 
 - Windows 11
 - Windows 10 may work, but Windows 11 is the primary target
 - Go 1.22 or later to build from source
 
-## Build
+## Build From Source
 
 From PowerShell:
 
@@ -103,6 +137,12 @@ Build:
 
 ```powershell
 .\build.ps1
+```
+
+Create a release zip and checksum:
+
+```powershell
+.\package-release.ps1 -Version v0.1.0
 ```
 
 The main entry point is `cmd/app`, with implementation packages under
