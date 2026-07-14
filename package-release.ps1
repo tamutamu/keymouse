@@ -19,7 +19,7 @@ Push-Location $root
 try {
     & .\build.ps1
 
-    Copy-Item -LiteralPath (Join-Path $root "keymouse.exe") -Destination $staging
+    Copy-Item -LiteralPath (Join-Path $root "dist\keymouse\keymouse.exe") -Destination $staging
     Copy-Item -LiteralPath (Join-Path $root "README.md") -Destination $staging
     Copy-Item -LiteralPath (Join-Path $root "README_ja.md") -Destination $staging
     Copy-Item -LiteralPath (Join-Path $root "LICENSE") -Destination $staging

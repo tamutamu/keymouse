@@ -40,9 +40,9 @@ func (winInput) Click(action spatial.ClickAction) error {
 
 func (winInput) ShiftHeld() bool { return win32.IsShiftPressed() }
 
-func (winInput) AltHeld() bool { return win32.IsAltPressed() }
-
 func (winInput) ReleaseShift() { win32.ReleaseShift() }
+
+func (winInput) InjectEscape() { win32.InjectEscape() }
 
 // winMonitors は MonitorLocator ポートを Win32 で実装する。
 type winMonitors struct{}
@@ -67,12 +67,9 @@ func (winMonitors) MonitorAtCursor() (monitor.Info, error) {
 // winOverlayFactory は OverlayFactory ポートを overlay パッケージで実装する。
 type winOverlayFactory struct{}
 
-func (winOverlayFactory) NewOverlay(mon monitor.Info, size spatial.LabelSize) (Overlay, error) {
+func (winOverlayFactory) NewOverlay(area spatial.Rect, size spatial.LabelSize) (Overlay, error) {
 	rect := win32.RECT{
-		Left:   int32(mon.Left),
-		Top:    int32(mon.Top),
-		Right:  int32(mon.Right),
-		Bottom: int32(mon.Bottom),
+		Left: int32(area.X), Top: int32(area.Y), Right: int32(area.X + area.W), Bottom: int32(area.Y + area.H),
 	}
 	ov, err := overlay.New(rect, size)
 	if err != nil {

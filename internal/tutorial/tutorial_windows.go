@@ -9,15 +9,13 @@ import "github.com/tamutamu/keymouse/internal/win32"
 const tutorialText = `Welcome to KeyMouse!
 
 How to use:
-  1. Press the hotkey (default: Alt+L for left click, Alt+R for right, Alt+D for double).
-  2. The screen dims and shows letter labels (A–Y) over a 5×5 grid.
-  3. Press a label key to zoom into that region (labels refresh).
-  4. Keep pressing label keys to narrow down the target.
-  5. Press Shift+<label> at any depth to click immediately.
-  6. Press Backspace to go back one level.
-  7. Press Esc to cancel without clicking.
+  1. Double-tap Shift for a left click (Alt+R/right, Alt+D/double).
+  2. Type the three-letter cell label (A/S/D/F/G/T/R/E/W/Q).
+  3. The third key clicks the centre of that fixed 40x25 grid cell.
+  4. H/J/K/L move by 4 px; Shift+H/J/K/L moves by 16 px.
+  5. Backspace removes one letter; Esc cancels without clicking.
 
-The hotkeys and grid size can be changed in Settings (right-click the tray icon).`
+The labels and overlay cover the full monitor at the cursor.`
 
 // ShowFirstRun はチュートリアルを簡易なメッセージボックスで表示する。
 // parent は親ウィンドウハンドル(0 でデスクトップ)。

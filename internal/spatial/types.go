@@ -30,6 +30,9 @@ func (r Rect) Center() Point {
 // Key は Win32 の仮想キーコードを表す。
 type Key uint16
 
+// Label3 is a fixed three-key grid label.
+type Label3 [3]Key
+
 // ClickAction はマウスのクリック動作の種別を表す。
 type ClickAction int
 
@@ -41,8 +44,7 @@ const (
 
 // Anchor は選択グリッド内のラベル付き領域を表す。
 type Anchor struct {
-	// Label はこのセルに表示される仮想キーコードである。
-	Label Key
+	Label Label3
 	// DisplayRect はオーバーレイ(画面)座標系におけるセルの矩形である。
 	DisplayRect Rect
 	// SourceArea はこれに対応する物理モニター座標系の矩形である。

@@ -26,12 +26,6 @@ type Config struct {
 	HotkeyRight  input.HotkeyConfig `json:"hotkey_right"`
 	HotkeyDouble input.HotkeyConfig `json:"hotkey_double"`
 
-	// グリッド(希望する最大グリッドと、ラベルが読める最小サイズ)
-	Cols       int     `json:"cols"`
-	Rows       int     `json:"rows"`
-	MinLabelPx float64 `json:"min_label_px"`
-	MaxDepth   int     `json:"max_depth"` // 段数の安全上限
-
 	// 表示
 	LabelSize spatial.LabelSize `json:"label_size"`
 
@@ -47,11 +41,6 @@ func Default() Config {
 		HotkeyLeft:   hk[spatial.ClickLeft],
 		HotkeyRight:  hk[spatial.ClickRight],
 		HotkeyDouble: hk[spatial.ClickDouble],
-
-		Cols:       5,
-		Rows:       5,
-		MinLabelPx: 12,
-		MaxDepth:   3,
 
 		LabelSize: spatial.LabelNormal,
 

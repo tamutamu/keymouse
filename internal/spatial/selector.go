@@ -21,10 +21,10 @@ type Config struct {
 // 区切られるため、12px 程度まで下げても判読できる。
 func DefaultConfig() Config {
 	return Config{
-		Cols:       5,
-		Rows:       5,
+		Cols:       21,
+		Rows:       21,
 		MinLabelPx: 12,
-		MaxDepth:   3,
+		MaxDepth:   1,
 	}
 }
 
@@ -121,7 +121,7 @@ func clampInt(v, lo, hi int) int {
 //
 // 生成される Anchor は最大でも len(labels) 個である。グリッドのセル数が
 // ラベル数を上回る場合は、先頭から len(labels) 個のセルのみを使用する。
-func GenerateAnchors(cols, rows int, displayArea, sourceArea Rect, labels []Key) []Anchor {
+func GenerateAnchors(cols, rows int, displayArea, sourceArea Rect, labels []Label3) []Anchor {
 	if cols <= 0 {
 		cols = 1
 	}
@@ -188,4 +188,8 @@ func SourcePointPhysical(a Anchor) (x, y int) {
 	x = int(a.SourcePoint.X + 0.5)
 	y = int(a.SourcePoint.Y + 0.5)
 	return
+}
+
+func GenerateGridAnchors(area Rect) []Anchor {
+	return GenerateAnchors(40, 25, area, area, GenerateLabel3s(GridKeys))
 }

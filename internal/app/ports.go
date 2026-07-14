@@ -20,11 +20,11 @@ type Input interface {
 	Click(action spatial.ClickAction) error
 	// ShiftHeld はいずれかの Shift キーが押されていれば true を返す。
 	ShiftHeld() bool
-	// AltHeld は Alt キーが押されていれば true を返す。Alt+h/j/k/; のグリッド移動判定に使う。
-	AltHeld() bool
 	// ReleaseShift は Shift キーの押下状態を解除する。Shift+ラベルで即クリック
 	// する際、押されたままの Shift がクリックに漏れる(Shift+クリックになる)のを防ぐ。
 	ReleaseShift()
+	// InjectEscape は Escape キーの押下・解放イベントを注入する。
+	InjectEscape()
 }
 
 // MonitorLocator はカーソル位置にあるモニターの解決を抽象化する。
@@ -42,7 +42,7 @@ type Overlay interface {
 
 // OverlayFactory はモニターに合わせた Overlay を生成する。
 type OverlayFactory interface {
-	NewOverlay(mon monitor.Info, size spatial.LabelSize) (Overlay, error)
+	NewOverlay(rect spatial.Rect, size spatial.LabelSize) (Overlay, error)
 }
 
 // KeyHook は選択中のグローバルなキー入力取得を抽象化する。オーバーレイはフォーカスを

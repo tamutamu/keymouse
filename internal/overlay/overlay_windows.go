@@ -17,10 +17,10 @@ const overlayClassName = "KeyMouseOverlay"
 
 // fontSizeMap は spatial.LabelSize を GDI のフォント高(ピクセル)へ対応付ける。
 var fontSizeMap = map[spatial.LabelSize]int{
-	spatial.LabelSmall:  14,
-	spatial.LabelNormal: 20,
-	spatial.LabelLarge:  28,
-	spatial.LabelXLarge: 40,
+	spatial.LabelSmall:  10,
+	spatial.LabelNormal: 11,
+	spatial.LabelLarge:  14,
+	spatial.LabelXLarge: 18,
 }
 
 // overlayAlpha はオーバーレイウィンドウ全体の不透明度(0=透明〜255=不透明)。
@@ -33,6 +33,8 @@ const overlayAlpha = 140
 // フォーカスを奪わず(WS_EX_NOACTIVATE)、キーメッセージも扱わない。
 type Overlay struct {
 	window    *win32.Window
+	originX   float64
+	originY   float64
 	anchors   []spatial.Anchor
 	action    spatial.ClickAction
 	labelSize spatial.LabelSize
@@ -40,7 +42,7 @@ type Overlay struct {
 
 // New は monRect で示すモニターを覆うオーバーレイウィンドウを生成する(表示はしない)。
 func New(monRect win32.RECT, labelSize spatial.LabelSize) (*Overlay, error) {
-	o := &Overlay{labelSize: labelSize}
+	o := &Overlay{labelSize: labelSize, originX: float64(monRect.Left), originY: float64(monRect.Top)}
 	if labelSize == 0 {
 		o.labelSize = spatial.LabelNormal
 	}
@@ -148,7 +150,7 @@ func (o *Overlay) paint(hdc uintptr) {
 	// 各アンカーのラベルを描画する。フォント高はセルに収まるよう自動調整する
 	// (段が深くセルが小さいほど小さくなり、隣のラベルと重ならない)。
 	fontSize := o.stageFontSize()
-	font := win32.CreateFontBold(fontSize)
+	font := win32.CreateFontSemiBold(fontSize)
 	if font != 0 {
 		oldFont := win32.SelectObject(memDC, font)
 		win32.SetBkMode(memDC, win32.TRANSPARENT)
@@ -160,9 +162,6 @@ func (o *Overlay) paint(hdc uintptr) {
 		win32.SelectObject(memDC, oldFont)
 		win32.DeleteObject(font)
 	}
-
-	// 画面下部にステータスバーを描画する。
-	o.drawStatusBar(memDC, w, h)
 
 	// メモリ DC から画面 DC へ一括転送する。
 	win32.BitBlt(hdc, 0, 0, w, h, memDC, 0, 0)
@@ -182,7 +181,7 @@ func (o *Overlay) stageFontSize() int {
 
 	// 全セルの中で最も短い辺を求める(最終行・最終列は余りを吸収して大きめなので、
 	// 通常セルの辺長が下限になる)。
-	minSide := math.MaxFloat64
+	minSide := 1e100
 	for _, a := range o.anchors {
 		side := math.Min(a.DisplayRect.W, a.DisplayRect.H)
 		if side < minSide {
@@ -190,14 +189,13 @@ func (o *Overlay) stageFontSize() int {
 		}
 	}
 
-	// セル短辺と同じ高さをフォント高とし、上限は設定値、下限は判読可能な10pxとする。
-	// 文字の実描画高はフォント高の約7割なので、等倍でも枠やグリッド線に触れない。
-	fit := int(minSide * 1.0)
+	// 文字サイズをさらに小さくするため 0.7 倍する。下限は 8px。
+	fit := int(minSide * 0.7)
 	if fit >= configured {
 		return configured
 	}
-	if fit < 10 {
-		fit = 10
+	if fit < 8 {
+		fit = 8
 	}
 	return fit
 }
@@ -210,9 +208,11 @@ func (o *Overlay) drawGridLines(hdc uintptr) {
 	}
 	defer win32.DeleteObject(brush)
 
-	const t = 1 // 線の太さ(px)
+	t := int32(1)
 	for _, a := range o.anchors {
 		r := a.DisplayRect
+		r.X -= o.originX
+		r.Y -= o.originY
 		x0, y0 := int32(r.X), int32(r.Y)
 		x1, y1 := int32(r.X+r.W), int32(r.Y+r.H)
 
@@ -232,14 +232,14 @@ func (o *Overlay) drawGridLines(hdc uintptr) {
 // クリック先はセル中心なので、文字の実寸を測ってセル中心へ正確にセンタリングする
 // (固定の fontSize/2 では1文字の実幅とずれ、クリックが視覚より右にずれてしまう)。
 func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor) {
-	label := spatial.KeyToChar(a.Label)
+	label := spatial.Label3ToStr(a.Label)
 	if label == "" {
 		return
 	}
 
 	// オーバーレイ座標系でのセル中心。
-	cx := int(a.DisplayRect.X + a.DisplayRect.W/2)
-	cy := int(a.DisplayRect.Y + a.DisplayRect.H/2)
+	cx := int(a.DisplayRect.X - o.originX + a.DisplayRect.W/2)
+	cy := int(a.DisplayRect.Y - o.originY + a.DisplayRect.H/2)
 
 	// 文字の実寸から左上原点を求め、セル中心に合わせる。
 	tw, th := win32.TextExtent(hdc, label)
@@ -256,41 +256,4 @@ func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor) {
 	// 明るい本体テキストを描画する。
 	win32.SetTextColor(hdc, win32.RGB(0xFF, 0xFF, 0x00)) // 黄色
 	win32.TextOut(hdc, x, y, label)
-}
-
-// drawStatusBar は画面下部に操作ヒント(クリック種別・操作キー)を描画する。
-func (o *Overlay) drawStatusBar(hdc uintptr, w, h int) {
-	var statusText string
-	switch o.action {
-	case spatial.ClickLeft:
-		statusText = "Left Click  |  Shift+key = click now  |  Backspace = back  |  Esc = cancel"
-	case spatial.ClickRight:
-		statusText = "Right Click  |  Shift+key = click now  |  Backspace = back  |  Esc = cancel"
-	case spatial.ClickDouble:
-		statusText = "Double Click  |  Shift+key = click now  |  Backspace = back  |  Esc = cancel"
-	default:
-		return
-	}
-
-	barH := 24
-	barRect := win32.RECT{
-		Left:   0,
-		Top:    int32(h - barH),
-		Right:  int32(w),
-		Bottom: int32(h),
-	}
-	barBrush := win32.CreateSolidBrush(win32.RGB(0x0D, 0x0D, 0x0D))
-	if barBrush != 0 {
-		win32.FillRect(hdc, &barRect, barBrush)
-		win32.DeleteObject(barBrush)
-	}
-
-	smallFont := win32.CreateFontBold(12)
-	if smallFont != 0 {
-		oldFont := win32.SelectObject(hdc, smallFont)
-		win32.SetTextColor(hdc, win32.RGB(0xCC, 0xCC, 0xCC))
-		win32.TextOut(hdc, 8, h-barH+5, statusText)
-		win32.SelectObject(hdc, oldFont)
-		win32.DeleteObject(smallFont)
-	}
 }
