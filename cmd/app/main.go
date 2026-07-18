@@ -7,6 +7,7 @@ package main
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/tamutamu/keymouse/internal/app"
@@ -21,9 +22,19 @@ func main() {
 	// メッセージループがウィンドウメッセージを受け取れなくなる。
 	runtime.LockOSThread()
 
-	// ログはファイル名・行番号付きで標準エラー出力へ。
+	// GUI アプリでも候補検出の失敗を調べられるよう、実行ファイルの隣に
+	// 診断ログを残す。起動に失敗しても従来通り標準エラーへフォールバックする。
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.SetOutput(os.Stderr)
+	if exe, err := os.Executable(); err == nil {
+		if f, err := os.OpenFile(filepath.Join(filepath.Dir(exe), "keymouse.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			defer f.Close()
+			log.SetOutput(f)
+		} else {
+			log.SetOutput(os.Stderr)
+		}
+	} else {
+		log.SetOutput(os.Stderr)
+	}
 
 	// 設定を読み込む(存在しなければ既定値、破損していれば退避して既定値)。
 	cfg, err := settings.Load()

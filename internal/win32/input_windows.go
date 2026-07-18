@@ -93,6 +93,13 @@ func ReleaseShift() {
 	procKeybdEvent.Call(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0)
 }
 
+// InjectEscape はシステムに対して Escape キーの押下と解放を送信する。
+// タイムアウト時の自動キャンセル等で用いる。
+func InjectEscape() {
+	procKeybdEvent.Call(0x1B, 0, 0, 0) // VK_ESCAPE
+	procKeybdEvent.Call(0x1B, 0, 2, 0) // KEYEVENTF_KEYUP
+}
+
 // GetCursorPos は現在のカーソル位置をスクリーン座標で返す。
 func GetCursorPos() (x, y int, err error) {
 	var pt POINT

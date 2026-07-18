@@ -161,3 +161,17 @@ func GetClientRect(hwnd uintptr) RECT {
 	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
 	return r
 }
+
+// ForegroundWindowRect returns the visible bounds of the active top-level window.
+func ForegroundWindowRect() (RECT, error) {
+	hwnd, _, _ := procGetForegroundWindow.Call()
+	if hwnd == 0 {
+		return RECT{}, fmt.Errorf("GetForegroundWindow returned 0")
+	}
+	var r RECT
+	ok, _, err := procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
+	if ok == 0 {
+		return RECT{}, fmt.Errorf("GetWindowRect: %w", err)
+	}
+	return r, nil
+}

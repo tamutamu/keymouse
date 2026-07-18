@@ -97,6 +97,10 @@ var (
 	procEndPaint                   = user32.NewProc("EndPaint")
 	procFillRect                   = user32.NewProc("FillRect")
 	procGetCursorPos               = user32.NewProc("GetCursorPos")
+	procGetForegroundWindow        = user32.NewProc("GetForegroundWindow")
+	procGetWindowRect              = user32.NewProc("GetWindowRect")
+	procGetDC                      = user32.NewProc("GetDC")
+	procReleaseDC                  = user32.NewProc("ReleaseDC")
 
 	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
 	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
@@ -110,6 +114,7 @@ var (
 	procSetTextColor           = gdi32.NewProc("SetTextColor")
 	procTextOut                = gdi32.NewProc("TextOutW")
 	procGetTextExtentPoint32   = gdi32.NewProc("GetTextExtentPoint32W")
+	procGetDIBits              = gdi32.NewProc("GetDIBits")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 )
@@ -127,6 +132,19 @@ type POINT struct {
 // SIZE は Win32 の SIZE 構造体に対応する(幅・高さ)。
 type SIZE struct {
 	CX, CY int32
+}
+
+type BITMAPINFOHEADER struct {
+	Size                         uint32
+	Width, Height                int32
+	Planes, BitCount             uint16
+	Compression, SizeImage       uint32
+	XPelsPerMeter, YPelsPerMeter int32
+	ClrUsed, ClrImportant        uint32
+}
+type BITMAPINFO struct {
+	Header BITMAPINFOHEADER
+	Colors [1]uint32
 }
 
 // MSG は Win32 の MSG 構造体に対応する。

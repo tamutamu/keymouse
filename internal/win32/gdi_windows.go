@@ -3,6 +3,7 @@
 package win32
 
 import (
+	"fmt"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -55,6 +56,40 @@ func BitBlt(dst uintptr, dstX, dstY, width, height int, src uintptr, srcX, srcY 
 	)
 }
 
+// CaptureBGRA copies an absolute desktop rectangle into a top-down BGRA image.
+// It is deliberately independent of the overlay, which is not visible yet
+// when the detector is invoked.
+func CaptureBGRA(left, top, width, height int) ([]byte, error) {
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("invalid capture size")
+	}
+	screen, _, err := procGetDC.Call(0)
+	if screen == 0 {
+		return nil, err
+	}
+	defer procReleaseDC.Call(0, screen)
+	mem := CreateCompatibleDC(screen)
+	if mem == 0 {
+		return nil, fmt.Errorf("CreateCompatibleDC failed")
+	}
+	defer DeleteDC(mem)
+	bmp := CreateCompatibleBitmap(screen, width, height)
+	if bmp == 0 {
+		return nil, fmt.Errorf("CreateCompatibleBitmap failed")
+	}
+	defer DeleteObject(bmp)
+	old := SelectObject(mem, bmp)
+	defer SelectObject(mem, old)
+	BitBlt(mem, 0, 0, width, height, screen, left, top)
+	bmi := BITMAPINFO{Header: BITMAPINFOHEADER{Size: uint32(unsafe.Sizeof(BITMAPINFOHEADER{})), Width: int32(width), Height: -int32(height), Planes: 1, BitCount: 32}}
+	pixels := make([]byte, width*height*4)
+	r, _, callErr := procGetDIBits.Call(mem, bmp, 0, uintptr(height), uintptr(unsafe.Pointer(&pixels[0])), uintptr(unsafe.Pointer(&bmi)), 0)
+	if r == 0 {
+		return nil, callErr
+	}
+	return pixels, nil
+}
+
 // CreateSolidBrush は指定色 (COLORREF) の単色ブラシを生成する。
 func CreateSolidBrush(color uintptr) uintptr {
 	brush, _, _ := procCreateSolidBrush.Call(color)
@@ -101,16 +136,16 @@ func TextExtent(dc uintptr, text string) (w, h int) {
 	return int(sz.CX), int(sz.CY)
 }
 
-// CreateFontBold は指定ピクセル高の太字 ClearType フォント (Segoe UI) を生成する。
+// CreateFontSemiBold は指定ピクセル高のやや太字の ClearType フォント (Segoe UI) を生成する。
 // 不要になったら DeleteObject で解放すること。
-func CreateFontBold(height int) uintptr {
+func CreateFontSemiBold(height int) uintptr {
 	faceName, _ := windows.UTF16FromString("Segoe UI")
 	font, _, _ := procCreateFontW.Call(
 		uintptr(height), // 高さ
 		0,               // 幅 (自動)
 		0,               // エスケープメント
 		0,               // 方向
-		700,             // 太さ FW_BOLD
+		600,             // 太さ FW_SEMIBOLD
 		0,               // イタリック
 		0,               // 下線
 		0,               // 打ち消し線
