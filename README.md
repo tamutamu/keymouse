@@ -9,6 +9,12 @@ discovery; selection always performs a real mouse click.
 
 No screen capture, OpenCV, telemetry, or network communication is used.
 
+## Demo
+
+[![KeyMouse demo: Element Mode and keyboard-driven clicking](assets/demo-preview.gif)](assets/demo.mp4)
+
+Click the preview to watch the full 53-second MP4 demo.
+
 ## Modes
 
 Press `Shift+Space` to start continuous Element Mode. KeyMouse scans the active
