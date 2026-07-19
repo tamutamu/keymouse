@@ -16,25 +16,25 @@ func IsGridKey(k Key) bool {
 func KeyToChar(k Key) string {
 	switch k {
 	case 0x52:
-		return "R"
+		return "r"
 	case 0x41:
-		return "A"
+		return "a"
 	case 0x53:
-		return "S"
+		return "s"
 	case 0x44:
-		return "D"
+		return "d"
 	case 0x46:
-		return "F"
+		return "f"
 	case 0x47:
-		return "G"
+		return "g"
 	case 0x54:
-		return "T"
+		return "t"
 	case 0x45:
-		return "E"
+		return "e"
 	case 0x57:
-		return "W"
+		return "w"
 	case 0x51:
-		return "Q"
+		return "q"
 	}
 	return ""
 }

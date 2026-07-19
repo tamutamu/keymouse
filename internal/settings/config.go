@@ -22,30 +22,42 @@ const appName = "keymouse"
 // そのまま用いることで、永続化用の重複した型定義と変換処理を避けている。
 type Config struct {
 	// ホットキー
-	HotkeyLeft   input.HotkeyConfig `json:"hotkey_left"`
-	HotkeyRight  input.HotkeyConfig `json:"hotkey_right"`
-	HotkeyDouble input.HotkeyConfig `json:"hotkey_double"`
+	HotkeyLeft       input.HotkeyConfig `json:"hotkey_left"`
+	HotkeyContinuous input.HotkeyConfig `json:"hotkey_continuous"`
+	HotkeyRight      input.HotkeyConfig `json:"hotkey_right"`
+	HotkeyDouble     input.HotkeyConfig `json:"hotkey_double"`
 
 	// 表示
 	LabelSize spatial.LabelSize `json:"label_size"`
 
 	// 動作
-	AutoStart        bool `json:"auto_start"`
-	ShowTutorialOnce bool `json:"show_tutorial_once"`
+	AutoStart             bool   `json:"auto_start"`
+	ShowTutorialOnce      bool   `json:"show_tutorial_once"`
+	ContinuousModeDefault bool   `json:"continuous_mode_default"`
+	PeekKey               string `json:"peek_key"`
+	Mode                  string `json:"mode"`
 }
 
 // Default はデフォルト値の Config を返す。
 func Default() Config {
-	hk := input.DefaultHotkeys()
+	hk := input.DefaultBindings()
+	byID := map[int]input.HotkeyConfig{}
+	for _, binding := range hk {
+		byID[binding.ID] = binding.Config
+	}
 	return Config{
-		HotkeyLeft:   hk[spatial.ClickLeft],
-		HotkeyRight:  hk[spatial.ClickRight],
-		HotkeyDouble: hk[spatial.ClickDouble],
+		HotkeyLeft:       byID[input.HotkeyIDSingle],
+		HotkeyContinuous: byID[input.HotkeyIDContinuous],
+		HotkeyRight:      byID[input.HotkeyIDRight],
+		HotkeyDouble:     byID[input.HotkeyIDDouble],
 
 		LabelSize: spatial.LabelNormal,
 
-		AutoStart:        false,
-		ShowTutorialOnce: true,
+		AutoStart:             false,
+		ShowTutorialOnce:      true,
+		ContinuousModeDefault: false,
+		PeekKey:               "Space",
+		Mode:                  "hybrid",
 	}
 }
 
@@ -85,6 +97,17 @@ func Load() (Config, error) {
 		}
 		return Default(), nil
 	}
+	if cfg.PeekKey == "" {
+		cfg.PeekKey = "Space"
+	}
+	if cfg.Mode == "" {
+		cfg.Mode = "hybrid"
+	}
+	defaults := Default()
+	// v0.3 uses deterministic activation keys. Override legacy Alt+N and any
+	// experimental values so the documented hotkeys and registered hotkeys agree.
+	cfg.HotkeyLeft = defaults.HotkeyLeft
+	cfg.HotkeyContinuous = defaults.HotkeyContinuous
 
 	return cfg, nil
 }

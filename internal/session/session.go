@@ -57,6 +57,34 @@ func (s *Session) CurrentAnchors() []spatial.Anchor {
 	}
 	return append([]spatial.Anchor(nil), s.anchors...)
 }
+
+// VisibleAnchors returns only anchors whose labels start with the current input.
+func (s *Session) VisibleAnchors() []spatial.Anchor {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state != StateSelecting {
+		return nil
+	}
+	visible := make([]spatial.Anchor, 0, len(s.anchors))
+	for _, a := range s.anchors {
+		if matchesPrefix(a.Label, s.input) {
+			visible = append(visible, a)
+		}
+	}
+	return visible
+}
+
+func matchesPrefix(label spatial.Label3, input []spatial.Key) bool {
+	if len(input) > len(label) {
+		return false
+	}
+	for i, key := range input {
+		if label[i] != key {
+			return false
+		}
+	}
+	return true
+}
 func (s *Session) SelectKey(k spatial.Key) (spatial.Anchor, bool, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,7 +103,7 @@ func (s *Session) SelectKey(k spatial.Key) (spatial.Anchor, bool, bool) {
 		}
 	}
 	s.input = nil
-	return spatial.Anchor{}, false, false
+	return spatial.Anchor{}, false, true
 }
 func (s *Session) Pan(dx, dy float64) bool {
 	s.mu.Lock()
@@ -106,6 +134,20 @@ func (s *Session) Backspace() bool {
 	s.input = s.input[:len(s.input)-1]
 	return true
 }
-func (s *Session) Cancel()          { s.mu.Lock(); defer s.mu.Unlock(); s.resetLocked() }
-func (s *Session) FinishExecuting() { s.mu.Lock(); defer s.mu.Unlock(); s.resetLocked() }
-func (s *Session) resetLocked()     { s.state = StateIdle; s.action = 0; s.input = nil; s.anchors = nil }
+func (s *Session) Cancel() { s.Finish() }
+func (s *Session) Finish() { s.mu.Lock(); defer s.mu.Unlock(); s.resetLocked() }
+
+// Continue starts a fresh selection over area while retaining the click action.
+func (s *Session) Continue(area spatial.Rect) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state != StateExecuting || area.W <= 0 || area.H <= 0 {
+		return false
+	}
+	s.area = area
+	s.input = nil
+	s.anchors = spatial.GenerateGridAnchors(area)
+	s.state = StateSelecting
+	return true
+}
+func (s *Session) resetLocked() { s.state = StateIdle; s.action = 0; s.input = nil; s.anchors = nil }

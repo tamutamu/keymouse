@@ -14,6 +14,11 @@ import (
 
 // Input はマウス入力の送信と修飾キー状態の取得を抽象化する。
 type Input interface {
+	// HideCursor hides the system pointer and remembers the exact ShowCursor
+	// counter adjustment so RestoreCursor can undo it safely.
+	HideCursor()
+	// RestoreCursor restores only the counter adjustment made by HideCursor.
+	RestoreCursor()
 	// MoveCursor はカーソルを物理スクリーン座標へ移動する。
 	MoveCursor(x, y int) error
 	// Click は指定種別のクリックを送信する。
@@ -34,8 +39,9 @@ type MonitorLocator interface {
 
 // Overlay は選択用オーバーレイの表示・更新・破棄を抽象化する。
 type Overlay interface {
-	Show(anchors []spatial.Anchor, action spatial.ClickAction)
-	UpdateAnchors(anchors []spatial.Anchor)
+	ShowLoading()
+	Show(anchors []spatial.Anchor, depth int, action spatial.ClickAction)
+	UpdateAnchors(anchors []spatial.Anchor, depth int)
 	Hide()
 	Destroy()
 }

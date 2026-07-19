@@ -8,6 +8,64 @@ import (
 	"unsafe"
 )
 
+// HideCursor decrements Windows' cursor display counter until the cursor is
+// hidden and returns the number of decrements. The caller must pass that exact
+// value to RestoreCursor; this preserves the pre-existing counter state.
+func HideCursor() (int, uintptr) {
+	calls := 0
+	for calls < 32 {
+		result, _, _ := procShowCursor.Call(0)
+		calls++
+		if int32(result) < 0 {
+			break
+		}
+	}
+	previous, _, _ := procSetCursor.Call(0)
+	return calls, previous
+}
+
+// RestoreCursor reverses a previous HideCursor call exactly.
+func RestoreCursor(calls int, previous uintptr) {
+	for i := 0; i < calls; i++ {
+		procShowCursor.Call(1)
+	}
+	if previous != 0 {
+		procSetCursor.Call(previous)
+	}
+}
+
+// ClearCursor immediately removes a cursor image that an underlying window
+// may have set again while the selection overlay remains active.
+func ClearCursor() { procSetCursor.Call(0) }
+
+// CreateTransparentCursor creates a monochrome cursor whose AND mask keeps
+// every destination pixel and whose XOR mask changes none of them. The cursor
+// is therefore visually transparent even when Windows considers it shown.
+func CreateTransparentCursor() (uintptr, error) {
+	andMask := [128]byte{}
+	for i := range andMask {
+		andMask[i] = 0xFF
+	}
+	xorMask := [128]byte{}
+	handle, _, err := procCreateCursor.Call(
+		0, 0, 0, 32, 32,
+		uintptr(unsafe.Pointer(&andMask[0])),
+		uintptr(unsafe.Pointer(&xorMask[0])),
+	)
+	if handle == 0 {
+		return 0, fmt.Errorf("CreateCursor: %w", err)
+	}
+	return handle, nil
+}
+
+func SetCursorHandle(cursor uintptr) { procSetCursor.Call(cursor) }
+
+func DestroyCursor(cursor uintptr) {
+	if cursor != 0 {
+		procDestroyCursor.Call(cursor)
+	}
+}
+
 // SetCursorPos はカーソルを指定したスクリーン座標へ移動する。
 func SetCursorPos(x, y int) error {
 	r, _, err := procSetCursorPos.Call(uintptr(x), uintptr(y))

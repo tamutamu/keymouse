@@ -7,37 +7,36 @@ package overlay
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/tamutamu/keymouse/internal/spatial"
 	"github.com/tamutamu/keymouse/internal/win32"
 )
 
 const overlayClassName = "KeyMouseOverlay"
+const cursorShieldClassName = "KeyMouseCursorShield"
 
 // fontSizeMap は spatial.LabelSize を GDI のフォント高(ピクセル)へ対応付ける。
 var fontSizeMap = map[spatial.LabelSize]int{
-	spatial.LabelSmall:  10,
-	spatial.LabelNormal: 11,
-	spatial.LabelLarge:  14,
-	spatial.LabelXLarge: 18,
+	spatial.LabelSmall:  14,
+	spatial.LabelNormal: 16,
+	spatial.LabelLarge:  18,
+	spatial.LabelXLarge: 22,
 }
-
-// overlayAlpha はオーバーレイウィンドウ全体の不透明度(0=透明〜255=不透明)。
-// 背後の実画面が透けて見える程度に抑え、暗い背景塗りと合わせて画面を薄暗くする
-// (方式B: ズームせず実画面の上にラベルを重ねる)。
-const overlayAlpha = 140
 
 // Overlay は選択ラベルを描画する全画面レイヤードウィンドウを表す。
 // キー入力はフォーカスに依存しないキーボードフックで受け取るため、本ウィンドウは
 // フォーカスを奪わず(WS_EX_NOACTIVATE)、キーメッセージも扱わない。
 type Overlay struct {
-	window    *win32.Window
-	originX   float64
-	originY   float64
-	anchors   []spatial.Anchor
-	action    spatial.ClickAction
-	labelSize spatial.LabelSize
+	window       *win32.Window
+	cursorShield *win32.Window
+	originX      float64
+	originY      float64
+	anchors      []spatial.Anchor
+	action       spatial.ClickAction
+	depth        int
+	loading      bool
+	labelSize    spatial.LabelSize
+	cursor       uintptr
 }
 
 // New は monRect で示すモニターを覆うオーバーレイウィンドウを生成する(表示はしない)。
@@ -47,44 +46,112 @@ func New(monRect win32.RECT, labelSize spatial.LabelSize) (*Overlay, error) {
 		o.labelSize = spatial.LabelNormal
 	}
 
+	cursor, err := win32.CreateTransparentCursor()
+	if err != nil {
+		return nil, fmt.Errorf("overlay transparent cursor: %w", err)
+	}
+	o.cursor = cursor
+	shield, err := win32.CreateLayeredWindow(cursorShieldClassName, monRect, o.handleCursorShieldMessage)
+	if err != nil {
+		win32.DestroyCursor(o.cursor)
+		return nil, fmt.Errorf("overlay cursor shield: %w", err)
+	}
+	// Alpha zero layered pixels are also mouse-transparent. Alpha one is
+	// visually imperceptible but keeps the full monitor in hit testing.
+	shield.SetLayeredAlpha(1)
+	o.cursorShield = shield
+
 	w, err := win32.CreateLayeredWindow(overlayClassName, monRect, o.handleMessage)
 	if err != nil {
+		o.cursorShield.DestroyWindow()
+		win32.DestroyCursor(o.cursor)
 		return nil, fmt.Errorf("overlay.New: %w", err)
 	}
 	o.window = w
 
-	// ウィンドウ全体を半透明にして実画面を透過させる。
-	o.window.SetLayeredAlpha(overlayAlpha)
+	// Black is the transparent color. Only label pixels remain visible.
+	o.window.SetLayeredColorKey(win32.RGB(0, 0, 0))
 	return o, nil
 }
 
 // Show は指定したアンカー集合とクリック種別の表示でオーバーレイを表示する。
-func (o *Overlay) Show(anchors []spatial.Anchor, action spatial.ClickAction) {
+func (o *Overlay) Show(anchors []spatial.Anchor, depth int, action spatial.ClickAction) {
+	o.loading = false
 	o.anchors = anchors
+	o.depth = depth
 	o.action = action
 	// フォーカスを奪わずに表示する(背後のメニュー等を閉じさせない)。
+	o.cursorShield.ShowNoActivate()
+	o.cursorShield.CaptureMouse()
 	o.window.ShowNoActivate()
+	win32.SetCursorHandle(o.cursor)
+	o.window.Invalidate()
+}
+
+// ShowLoading displays a small non-activating progress indication while UIA
+// discovery runs. It intentionally has no opaque panel.
+func (o *Overlay) ShowLoading() {
+	o.loading = true
+	o.anchors = nil
+	o.cursorShield.ShowNoActivate()
+	o.cursorShield.CaptureMouse()
+	o.window.ShowNoActivate()
+	win32.SetCursorHandle(o.cursor)
 	o.window.Invalidate()
 }
 
 // UpdateAnchors は現在のアンカー集合を差し替えて再描画する。
-func (o *Overlay) UpdateAnchors(anchors []spatial.Anchor) {
+func (o *Overlay) UpdateAnchors(anchors []spatial.Anchor, depth int) {
+	o.loading = false
 	o.anchors = anchors
+	o.depth = depth
+	win32.SetCursorHandle(o.cursor)
 	o.window.Invalidate()
 }
 
-// Hide はオーバーレイを非表示にし、アンカー情報を破棄する。
+// Hide temporarily hides the overlay without losing its selection state.
 func (o *Overlay) Hide() {
-	o.anchors = nil
+	win32.ReleaseMouseCapture()
 	o.window.Hide()
+	o.cursorShield.Hide()
 }
 
 // Destroy はオーバーレイウィンドウを破棄して資源を解放する。
 func (o *Overlay) Destroy() {
+	win32.ReleaseMouseCapture()
 	if o.window != nil {
 		o.window.DestroyWindow()
 		o.window = nil
 	}
+	if o.cursorShield != nil {
+		o.cursorShield.DestroyWindow()
+		o.cursorShield = nil
+	}
+	win32.DestroyCursor(o.cursor)
+	o.cursor = 0
+}
+
+func (o *Overlay) handleCursorShieldMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (bool, uintptr) {
+	switch msg {
+	case win32.WM_SETCURSOR:
+		win32.SetCursorHandle(o.cursor)
+		return true, 1
+	case win32.WM_PAINT:
+		hdc, ps := win32.BeginPaint(hwnd)
+		if hdc != 0 {
+			r := win32.GetClientRect(hwnd)
+			brush := win32.CreateSolidBrush(win32.RGB(0, 0, 0))
+			if brush != 0 {
+				win32.FillRect(hdc, &r, brush)
+				win32.DeleteObject(brush)
+			}
+		}
+		win32.EndPaint(hwnd, &ps)
+		return true, 0
+	case win32.WM_ERASEBKGND:
+		return true, 1
+	}
+	return false, 0
 }
 
 // HWND は内部のウィンドウハンドルを返す。
@@ -98,6 +165,12 @@ func (o *Overlay) HWND() uintptr {
 // handleMessage はオーバーレイウィンドウのウィンドウプロシージャである。
 func (o *Overlay) handleMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (bool, uintptr) {
 	switch msg {
+	case win32.WM_SETCURSOR:
+		// While the overlay owns hit testing, prevent DefWindowProc or the
+		// underlying application from assigning a visible cursor.
+		win32.SetCursorHandle(o.cursor)
+		return true, 1
+
 	case win32.WM_PAINT:
 		hdc, ps := win32.BeginPaint(hwnd)
 		if hdc != 0 {
@@ -113,7 +186,7 @@ func (o *Overlay) handleMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr
 	return false, 0
 }
 
-// paint は半透明の背景と全アンカーのラベルを描画する。
+// paint draws labels on a color-keyed, fully transparent background.
 // ちらつきを防ぐためメモリ DC への二重バッファ描画を行う。
 func (o *Overlay) paint(hdc uintptr) {
 	cr := win32.GetClientRect(o.window.HWND)
@@ -136,16 +209,13 @@ func (o *Overlay) paint(hdc uintptr) {
 	oldBmp := win32.SelectObject(memDC, bmp)
 	defer win32.SelectObject(memDC, oldBmp)
 
-	// 背景を暗い半透明オーバーレイ色で塗りつぶす。
-	bgBrush := win32.CreateSolidBrush(win32.RGB(0x1A, 0x1A, 0x2E)) // 濃紺
+	// The color-key background is completely transparent.
+	bgBrush := win32.CreateSolidBrush(win32.RGB(0, 0, 0))
 	if bgBrush != 0 {
 		bgRect := win32.RECT{Left: 0, Top: 0, Right: int32(w), Bottom: int32(h)}
 		win32.FillRect(memDC, &bgRect, bgBrush)
 		win32.DeleteObject(bgBrush)
 	}
-
-	// セルの境界を示すグリッド線を描画する(現在の段の全セルの枠線)。
-	o.drawGridLines(memDC)
 
 	// 各アンカーのラベルを描画する。フォント高はセルに収まるよう自動調整する
 	// (段が深くセルが小さいほど小さくなり、隣のラベルと重ならない)。
@@ -158,6 +228,9 @@ func (o *Overlay) paint(hdc uintptr) {
 		for _, a := range o.anchors {
 			o.drawAnchorLabel(memDC, a)
 		}
+		if o.loading {
+			o.drawLoading(memDC, w, h)
+		}
 
 		win32.SelectObject(memDC, oldFont)
 		win32.DeleteObject(font)
@@ -165,6 +238,19 @@ func (o *Overlay) paint(hdc uintptr) {
 
 	// メモリ DC から画面 DC へ一括転送する。
 	win32.BitBlt(hdc, 0, 0, w, h, memDC, 0, 0)
+}
+
+func (o *Overlay) drawLoading(hdc uintptr, width, height int) {
+	const label = "loading..."
+	tw, th := win32.TextExtent(hdc, label)
+	x, y := (width-tw)/2, (height-th)/2
+	offsets := [][2]int{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}, {0, -2}, {0, 2}, {-2, 0}, {2, 0}}
+	win32.SetTextColor(hdc, win32.RGB(0x01, 0x01, 0x01))
+	for _, offset := range offsets {
+		win32.TextOut(hdc, x+offset[0], y+offset[1], label)
+	}
+	win32.SetTextColor(hdc, win32.RGB(0xFF, 0xFF, 0x00))
+	win32.TextOut(hdc, x, y, label)
 }
 
 // stageFontSize は現在の段のセルサイズに収まるラベルフォント高(px)を返す。
@@ -175,29 +261,7 @@ func (o *Overlay) stageFontSize() int {
 	if configured == 0 {
 		configured = fontSizeMap[spatial.LabelNormal]
 	}
-	if len(o.anchors) == 0 {
-		return configured
-	}
-
-	// 全セルの中で最も短い辺を求める(最終行・最終列は余りを吸収して大きめなので、
-	// 通常セルの辺長が下限になる)。
-	minSide := 1e100
-	for _, a := range o.anchors {
-		side := math.Min(a.DisplayRect.W, a.DisplayRect.H)
-		if side < minSide {
-			minSide = side
-		}
-	}
-
-	// 文字サイズをさらに小さくするため 0.7 倍する。下限は 8px。
-	fit := int(minSide * 0.7)
-	if fit >= configured {
-		return configured
-	}
-	if fit < 8 {
-		fit = 8
-	}
-	return fit
+	return configured
 }
 
 // drawGridLines は現在の段の全セルの枠線(グリッド線)を描画する。
@@ -233,6 +297,9 @@ func (o *Overlay) drawGridLines(hdc uintptr) {
 // (固定の fontSize/2 では1文字の実幅とずれ、クリックが視覚より右にずれてしまう)。
 func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor) {
 	label := spatial.Label3ToStr(a.Label)
+	if o.depth > 0 && o.depth < len(label) {
+		label = label[o.depth:]
+	}
 	if label == "" {
 		return
 	}
@@ -248,7 +315,7 @@ func (o *Overlay) drawAnchorLabel(hdc uintptr, a spatial.Anchor) {
 
 	// 暗いハロー/影を周囲 8 方向にオフセット描画する(明暗どちらの背景でも読めるように)。
 	offsets := [][2]int{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}, {0, -2}, {0, 2}, {-2, 0}, {2, 0}}
-	win32.SetTextColor(hdc, win32.RGB(0x00, 0x00, 0x00))
+	win32.SetTextColor(hdc, win32.RGB(0x01, 0x01, 0x01))
 	for _, off := range offsets {
 		win32.TextOut(hdc, x+off[0], y+off[1], label)
 	}

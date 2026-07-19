@@ -25,6 +25,8 @@ const (
 	WM_KEYDOWN    = 0x0100
 	WM_SYSKEYDOWN = 0x0104 // Alt 押下中のキーは WM_KEYDOWN ではなくこちらで届く
 	WM_ERASEBKGND = 0x0014
+	WM_SETCURSOR  = 0x0020
+	WM_APP        = 0x8000
 
 	// 仮想キーコード
 	VK_SHIFT  = 0x10
@@ -39,7 +41,8 @@ const (
 	WH_KEYBOARD_LL = 13
 
 	// レイヤードウィンドウの属性
-	LWA_ALPHA = 0x00000002
+	LWA_COLORKEY = 0x00000001
+	LWA_ALPHA    = 0x00000002
 
 	// GDI 定数
 	SRCCOPY     = 0x00CC0020
@@ -74,6 +77,7 @@ var (
 	procDispatchMessage            = user32.NewProc("DispatchMessageW")
 	procTranslateMessage           = user32.NewProc("TranslateMessage")
 	procPostQuitMessage            = user32.NewProc("PostQuitMessage")
+	procPostMessage                = user32.NewProc("PostMessageW")
 	procCreateWindowEx             = user32.NewProc("CreateWindowExW")
 	procDestroyWindow              = user32.NewProc("DestroyWindow")
 	procDefWindowProc              = user32.NewProc("DefWindowProcW")
@@ -88,6 +92,12 @@ var (
 	procUnhookWindowsHookEx        = user32.NewProc("UnhookWindowsHookEx")
 	procCallNextHookEx             = user32.NewProc("CallNextHookEx")
 	procSetCursorPos               = user32.NewProc("SetCursorPos")
+	procSetCursor                  = user32.NewProc("SetCursor")
+	procCreateCursor               = user32.NewProc("CreateCursor")
+	procDestroyCursor              = user32.NewProc("DestroyCursor")
+	procShowCursor                 = user32.NewProc("ShowCursor")
+	procSetCapture                 = user32.NewProc("SetCapture")
+	procReleaseCapture             = user32.NewProc("ReleaseCapture")
 	procSendInput                  = user32.NewProc("SendInput")
 	procGetDoubleClickTime         = user32.NewProc("GetDoubleClickTime")
 	procMonitorFromPoint           = user32.NewProc("MonitorFromPoint")

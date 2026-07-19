@@ -2,27 +2,48 @@
 
 README: English | [日本語](README_ja.md)
 
-KeyMouse is a small Windows tray app for clicking anywhere while keeping your
-hands on the keyboard. It uses a fixed, learnable `40 × 25` grid: every cell
-has a three-letter label made from `A S D F G T R E W Q` (`AAA`, `AAS`, `AAD`, …).
+KeyMouse is a lightweight Windows tray app for discovering and clicking UI
+targets without leaving the keyboard. It combines Windows UI Automation element
+hints with the existing fixed coordinate grid. UI Automation is used only for
+discovery; selection always performs a real mouse click.
 
-No screen capture, OpenCV, element detection, telemetry, or network access is
-used.
+No screen capture, OpenCV, telemetry, or network communication is used.
 
-## Use
+## Modes
 
-1. Double-tap `Shift` to start a left-click selection. Use `Alt+R` for right
-   click or `Alt+D` for double click.
-2. The monitor containing the cursor is covered by the 1,000-cell grid.
-3. Type the three letters shown in the target cell. The third key immediately
-   clicks its centre.
+Press `Shift+Space` to start continuous Element Mode. KeyMouse scans the active
+window, shows `loading...` while discovery is running, and places short lowercase
+labels on visible actionable elements. Labels use the shortest available length
+and grow to two or three characters only when the candidate count requires it.
 
-While the grid is visible:
+Automatic UIA-to-grid fallback is not used. While labels are visible, press
+`Shift+G` to switch to Grid Mode and press it again to rescan and return to
+Element Mode. Grid Mode divides the cursor monitor into a fixed `40 × 25` grid
+with three-character labels made from `a s d f g t r e w q`.
 
-- `H/J/K/L`: move the whole grid left/down/up/right by 4 px and clear partial input
-- `Shift+H/J/K/L`: move by 16 px and clear partial input
-- `Backspace`: remove the last typed label letter
-- `Esc`: cancel
+## Controls
+
+- lowercase label keys: filter candidates and click the completed target
+- `Backspace`: remove the last label character
+- `H/J/K/L`: move labels left/down/up/right by 4 px
+- `Shift+H/J/K/L`: move labels by 16 px
+- `Shift+R`: rescan and regenerate labels in the current mode
+- hold `Space`: temporarily hide the overlay (peek)
+- `Shift+G`: toggle Element Mode and Grid Mode
+- `Shift+Space` or `Esc`: end continuous selection
+
+The overlay is hidden before KeyMouse moves the pointer and sends the physical
+click. Continuous mode then refreshes the visible targets for the next action.
+
+## Inspector
+
+```powershell
+keymouse.exe inspect
+```
+
+Inspector writes the foreground window's UI Automation tree as JSON, including
+names, control types, Automation IDs, classes, bounds, state, supported actions,
+and depth. It is intended for diagnosing provider differences and missing hints.
 
 ## Build
 

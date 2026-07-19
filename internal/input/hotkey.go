@@ -7,15 +7,17 @@ import "github.com/tamutamu/keymouse/internal/spatial"
 
 // RegisterHotKey に渡すホットキーID。
 const (
-	HotkeyIDLeft   = 1
-	HotkeyIDRight  = 2
-	HotkeyIDDouble = 3
+	HotkeyIDSingle     = 1
+	HotkeyIDRight      = 2
+	HotkeyIDDouble     = 3
+	HotkeyIDContinuous = 4
 )
 
 // ホットキー修飾キー。Win32 の MOD_* と同値だが、本パッケージを OS 非依存に
 // 保つため独自に定義する(win32 への依存を避けてテスト可能にする)。
 const (
 	ModAlt      = 0x0001
+	ModShift    = 0x0004
 	ModNoRepeat = 0x4000
 )
 
@@ -26,36 +28,28 @@ type HotkeyConfig struct {
 	Modifiers uint32 `json:"modifiers"`
 }
 
-// DefaultHotkeys returns Alt+R / Alt+D; left click is a double Shift tap.
-func DefaultHotkeys() map[spatial.ClickAction]HotkeyConfig {
-	return map[spatial.ClickAction]HotkeyConfig{
-		spatial.ClickLeft:   {VK: 0, Modifiers: 0},
-		spatial.ClickRight:  {VK: 0x52, Modifiers: ModAlt | ModNoRepeat}, // Alt+R
-		spatial.ClickDouble: {VK: 0x44, Modifiers: ModAlt | ModNoRepeat}, // Alt+D
-	}
+type Binding struct {
+	ID     int
+	Config HotkeyConfig
 }
 
-// idForAction はクリック種別からホットキーIDへの対応を返す。
-func idForAction() map[spatial.ClickAction]int {
-	return map[spatial.ClickAction]int{
-		spatial.ClickLeft:   HotkeyIDLeft,
-		spatial.ClickRight:  HotkeyIDRight,
-		spatial.ClickDouble: HotkeyIDDouble,
+func DefaultBindings() []Binding {
+	return []Binding{
+		{ID: HotkeyIDSingle, Config: HotkeyConfig{VK: 0x4B, Modifiers: ModAlt | ModNoRepeat}},     // Alt+K
+		{ID: HotkeyIDContinuous, Config: HotkeyConfig{VK: 0x49, Modifiers: ModAlt | ModNoRepeat}}, // Alt+I
+		{ID: HotkeyIDRight, Config: HotkeyConfig{VK: 0x52, Modifiers: ModAlt | ModNoRepeat}},      // Alt+R
+		{ID: HotkeyIDDouble, Config: HotkeyConfig{VK: 0x44, Modifiers: ModAlt | ModNoRepeat}},     // Alt+D
 	}
 }
 
 // ActionForHotkeyID は WM_HOTKEY の wParam(ホットキーID)を ClickAction に対応付ける。
 // 自分のホットキーでなければ (0, false) を返す。
-func ActionForHotkeyID(id uintptr) (spatial.ClickAction, bool) {
+func IsKnownHotkeyID(id uintptr) bool {
 	switch int(id) {
-	case HotkeyIDLeft:
-		return spatial.ClickLeft, true
-	case HotkeyIDRight:
-		return spatial.ClickRight, true
-	case HotkeyIDDouble:
-		return spatial.ClickDouble, true
+	case HotkeyIDSingle, HotkeyIDContinuous, HotkeyIDRight, HotkeyIDDouble:
+		return true
 	}
-	return 0, false
+	return false
 }
 
 // IsLabelKey reports whether vk is one of A/S/D/F/G/T.

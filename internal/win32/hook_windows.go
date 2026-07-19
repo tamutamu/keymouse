@@ -46,7 +46,7 @@ func modifierKind(vk uint32) (isAlt, isShift, isModifier bool) {
 }
 
 // keyboardHookProc は全キー入力に対して呼ばれるフックプロシージャ。
-// 全キー(修飾キーを含む)をコールバックへ渡す(待機中の Shift 2連打検出のため)。
+// 全キー(修飾キーを含む)をコールバックへ渡す。
 // ただし飲み込む(背後アプリへ渡さない)のは非修飾キーのみとし、修飾キー(Shift/Ctrl/Alt)は
 // コールバックの戻り値に関わらず必ず通過させる(システムの修飾状態を壊さないため)。
 // lParam(KBDLLHOOKSTRUCT へのポインタ)は OS が指す有効領域なので *KBDLLHOOKSTRUCT で

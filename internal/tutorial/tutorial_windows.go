@@ -9,7 +9,7 @@ import "github.com/tamutamu/keymouse/internal/win32"
 const tutorialText = `Welcome to KeyMouse!
 
 How to use:
-  1. Double-tap Shift for a left click (Alt+R/right, Alt+D/double).
+  1. Press Shift+Space to start continuous left-click mode.
   2. Type the three-letter cell label (A/S/D/F/G/T/R/E/W/Q).
   3. The third key clicks the centre of that fixed 40x25 grid cell.
   4. H/J/K/L move by 4 px; Shift+H/J/K/L moves by 16 px.

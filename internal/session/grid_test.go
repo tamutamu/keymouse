@@ -1,8 +1,9 @@
 package session
 
 import (
-	"github.com/tamutamu/keymouse/internal/spatial"
 	"testing"
+
+	"github.com/tamutamu/keymouse/internal/spatial"
 )
 
 func TestFixedGridLabelsClickOnThirdKey(t *testing.T) {
@@ -14,7 +15,7 @@ func TestFixedGridLabelsClickOnThirdKey(t *testing.T) {
 	if len(anchors) != 1000 {
 		t.Fatalf("anchors=%d", len(anchors))
 	}
-	if spatial.Label3ToStr(anchors[0].Label) != "AAA" || spatial.Label3ToStr(anchors[1].Label) != "AAS" {
+	if spatial.Label3ToStr(anchors[0].Label) != "aaa" || spatial.Label3ToStr(anchors[1].Label) != "aas" {
 		t.Fatal("labels are not row-major base-ten")
 	}
 	for i, k := range anchors[999].Label {
