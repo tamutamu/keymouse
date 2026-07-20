@@ -62,6 +62,8 @@ type App struct {
 	labelRefreshDown     bool
 	modeToggleDown       bool
 	gridMode             bool
+	pendingExecution     *executionRequest
+	pendingExecutionVK   uint32
 }
 
 type activationPlan struct {
@@ -243,6 +245,19 @@ func (a *App) onKeyHook(v uint32, down bool) bool {
 			a.shiftDown = false
 		}
 	}
+	// A label is resolved on key-down, but sending the mouse click while that
+	// physical key is still held is unreliable in some applications (notably
+	// Windows Terminal). Keep consuming input and dispatch the click only after
+	// the selecting key has been released.
+	if a.pendingExecution != nil {
+		if !down && v == a.pendingExecutionVK {
+			request := *a.pendingExecution
+			a.pendingExecution = nil
+			a.pendingExecutionVK = 0
+			a.requestExecution(request)
+		}
+		return !isModifierVK(v)
+	}
 	// Shift+G toggles between Element and Grid modes while selection is active.
 	// Consume key repeat and both edges; unshifted g remains a label key.
 	if v == vkG && !down && a.modeToggleDown {
@@ -345,7 +360,7 @@ func (a *App) onKeyDown(v uintptr) {
 		}
 		anchor, click, advanced := a.session.SelectKey(spatial.Key(v))
 		if click {
-			a.beginGridExecution(anchor)
+			a.beginGridExecution(anchor, uint32(v))
 		} else if advanced {
 			a.refresh()
 		}
@@ -376,13 +391,18 @@ func (a *App) refresh() {
 		a.overlay.UpdateAnchors(a.session.VisibleAnchors(), a.session.CurrentDepth())
 	}
 }
-func (a *App) beginGridExecution(anchor spatial.Anchor) {
+func (a *App) beginGridExecution(anchor spatial.Anchor, selectingVK uint32) {
 	a.deps.Input.RestoreCursor()
 	if a.overlay != nil {
 		a.overlay.Hide()
 	}
 	generation := a.activationGeneration.Add(1)
-	a.requestExecution(executionRequest{generation: generation, action: a.session.ClickAction(), continuous: a.continuous, anchor: &anchor})
+	a.deferExecutionUntilKeyUp(selectingVK, executionRequest{generation: generation, action: a.session.ClickAction(), continuous: a.continuous, anchor: &anchor})
+}
+
+func (a *App) deferExecutionUntilKeyUp(selectingVK uint32, request executionRequest) {
+	a.pendingExecution = &request
+	a.pendingExecutionVK = selectingVK
 }
 
 func (a *App) performExecution(request executionRequest) executionResult {
@@ -470,6 +490,8 @@ func (a *App) cleanup() {
 	a.peeking = false
 	a.elementHints = nil
 	a.elementPrefix = ""
+	a.pendingExecution = nil
+	a.pendingExecutionVK = 0
 	if a.overlay != nil {
 		a.overlay.Destroy()
 		a.overlay = nil
@@ -592,7 +614,7 @@ func (a *App) onElementKey(v uint32, down bool) bool {
 	a.elementPrefix += spatial.KeyToChar(spatial.Key(v))
 	visible := hint.Filter(a.elementHints, a.elementPrefix)
 	if len(visible) == 1 && visible[0].Label == a.elementPrefix {
-		a.beginElementExecution(visible[0].Target)
+		a.beginElementExecution(visible[0].Target, v)
 		return true
 	}
 	if len(visible) == 0 || len(a.elementPrefix) >= 3 {
@@ -628,7 +650,7 @@ func (a *App) moveElementLabels(v uintptr) {
 	a.showElementHints()
 }
 
-func (a *App) beginElementExecution(t target.Target) {
+func (a *App) beginElementExecution(t target.Target, selectingVK uint32) {
 	a.deps.Input.RestoreCursor()
 	if a.overlay != nil {
 		a.overlay.Hide()
@@ -639,5 +661,5 @@ func (a *App) beginElementExecution(t target.Target) {
 	t.Bounds.X += a.elementLabelOffset.X
 	t.Bounds.Y += a.elementLabelOffset.Y
 	generation := a.activationGeneration.Add(1)
-	a.requestExecution(executionRequest{generation: generation, action: a.elementAction, continuous: a.continuous, element: &t})
+	a.deferExecutionUntilKeyUp(selectingVK, executionRequest{generation: generation, action: a.elementAction, continuous: a.continuous, element: &t})
 }
