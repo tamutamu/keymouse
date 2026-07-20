@@ -567,6 +567,19 @@ func labelVirtualKey(ch byte) spatial.Key {
 	return spatial.Key(ch)
 }
 
+func elementLabelChar(v uint32) (string, bool) {
+	if v < 'A' || v > 'Z' {
+		return "", false
+	}
+	ch := byte(v + ('a' - 'A'))
+	for _, key := range hint.Keys {
+		if ch == key {
+			return string(ch), true
+		}
+	}
+	return "", false
+}
+
 func (a *App) onElementKey(v uint32, down bool) bool {
 	if v == a.peekVK {
 		if down && !a.peeking {
@@ -603,7 +616,8 @@ func (a *App) onElementKey(v uint32, down bool) bool {
 		a.moveElementLabels(uintptr(v))
 		return true
 	}
-	if !spatial.IsGridKey(spatial.Key(v)) {
+	labelChar, isLabel := elementLabelChar(v)
+	if !isLabel {
 		return !isModifierVK(v)
 	}
 	// Label selection accepts unshifted (lowercase) keys only. Shift remains
@@ -611,7 +625,7 @@ func (a *App) onElementKey(v uint32, down bool) bool {
 	if a.shiftDown {
 		return true
 	}
-	a.elementPrefix += spatial.KeyToChar(spatial.Key(v))
+	a.elementPrefix += labelChar
 	visible := hint.Filter(a.elementHints, a.elementPrefix)
 	if len(visible) == 1 && visible[0].Label == a.elementPrefix {
 		a.beginElementExecution(visible[0].Target, v)

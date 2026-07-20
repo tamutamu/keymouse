@@ -2,6 +2,17 @@ package app
 
 import "testing"
 
+func TestElementLabelCharUsesNonGridLetters(t *testing.T) {
+	if got, ok := elementLabelChar('Z'); !ok || got != "z" {
+		t.Fatalf("elementLabelChar(Z) = %q, %v", got, ok)
+	}
+	for _, reserved := range []uint32{'H', 'J', 'K', 'L'} {
+		if got, ok := elementLabelChar(reserved); ok {
+			t.Fatalf("reserved movement key %c accepted as %q", reserved, got)
+		}
+	}
+}
+
 func TestPendingExecutionWaitsForSelectingKeyUp(t *testing.T) {
 	request := executionRequest{generation: 7}
 	dispatched := 0

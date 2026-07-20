@@ -7,7 +7,10 @@ import (
 	"github.com/tamutamu/keymouse/internal/target"
 )
 
-var Keys = []byte("asdfgtrewq")
+// Keys contains every unshifted letter available to Element Mode. H/J/K/L
+// remain reserved for moving labels, while shifted G/R retain their existing
+// mode-toggle and refresh meanings.
+var Keys = []byte("asdfgtrewqzxcvbnyuiopm")
 
 // MaxLabel3Items is the number of unique labels representable by the current
 // three-key overlay (10 * 10 * 10). Element discovery must cap its candidates

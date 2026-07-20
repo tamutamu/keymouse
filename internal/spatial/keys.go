@@ -14,27 +14,8 @@ func IsGridKey(k Key) bool {
 	return false
 }
 func KeyToChar(k Key) string {
-	switch k {
-	case 0x52:
-		return "r"
-	case 0x41:
-		return "a"
-	case 0x53:
-		return "s"
-	case 0x44:
-		return "d"
-	case 0x46:
-		return "f"
-	case 0x47:
-		return "g"
-	case 0x54:
-		return "t"
-	case 0x45:
-		return "e"
-	case 0x57:
-		return "w"
-	case 0x51:
-		return "q"
+	if k >= 'A' && k <= 'Z' {
+		return string(rune(k + ('a' - 'A')))
 	}
 	return ""
 }
